@@ -1,8 +1,14 @@
+//IP fixed as 192.168.16.184
+
 #include <WiFi.h>
 #include <WebServer.h>
 
-const char* ssid = "YourSSID";
-const char* password = "YourPassword";
+const char* ssid = "Wifi662-8_2B";
+const char* password = "0980566079";
+IPAddress local_IP(192, 168, 16, 184);   // 固定 IP，選一個沒被其他設備用的
+IPAddress gateway(192, 168, 16, 1);      // 通常是路由器 IP
+IPAddress subnet(255, 255, 255, 0);      // 子網掩碼
+
 
 WebServer server(80);
 String lastMsg = "No message received yet";
@@ -16,6 +22,12 @@ void handleRoot() {
 
 void setup() {
   Serial.begin(115200);        // UART with Raspberry Pi
+
+    // 設定靜態 IP
+  if (!WiFi.config(local_IP, gateway, subnet)) {
+    Serial.println("STA Failed to configure");
+  }
+
   WiFi.begin(ssid, password);  // Connect to Wi-Fi
 
   Serial.println("Connecting to WiFi...");
