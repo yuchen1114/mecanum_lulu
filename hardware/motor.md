@@ -1,3 +1,5 @@
-編碼器線數11
-減速比30
-輪子直徑70mm
+# motor
+Model: ASLONG JGB37-520 12V DC Worm Gear Motor
+Encoder Resolution: 11 pulses per revolution (PPR)
+Gear Ratio: 30:1
+Wheel Diameter: 70 mm
