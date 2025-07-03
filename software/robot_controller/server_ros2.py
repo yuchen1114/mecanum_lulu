@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-ROS2 Robot Controller Server
+ROS2 Robot Controller Server - Updated for Long-lived Connections
 This script runs on the Raspberry Pi and listens for commands from the web controller,
-then publishes them to ROS2 topics.
+then publishes them to ROS2 topics. Supports continuous command streams.
 """
 
 import socket
@@ -10,6 +10,7 @@ import threading
 import time
 import json
 from datetime import datetime
+import select
 
 import rclpy
 from rclpy.node import Node
@@ -20,6 +21,7 @@ from geometry_msgs.msg import Twist
 HOST = '0.0.0.0'  # Listen on all interfaces
 PORT = 8888
 MAX_CONNECTIONS = 5
+COMMAND_TIMEOUT = 0.5  # Stop robot if no command received for this many seconds
 
 class RobotControllerNode(Node):
     def __init__(self):
@@ -31,6 +33,7 @@ class RobotControllerNode(Node):
         self.last_command = None
         self.command_count = 0
         self.start_time = time.time()
+        self.last_move_command_time = 0
         
         # Create publishers
         self.cmd_vel_publisher = self.create_publisher(Twist, '/cmd_vel', 10)
@@ -41,12 +44,35 @@ class RobotControllerNode(Node):
         self.linear_speed = 0.5  # m/s
         self.angular_speed = 1.0  # rad/s
         
-        # Timer for publishing status
-        self.status_timer = self.create_timer(1.0, self.publish_status)
+        # Timer for publishing status and checking command timeout
+        self.status_timer = self.create_timer(0.1, self.update_loop)  # 10Hz update
+        
+        # Current movement state
+        self.current_twist = Twist()
         
         self.get_logger().info('ROS2 Robot Controller Node initialized')
-        self.get_logger().info('Waiting for commands from web server at localhost:5000')
+        self.get_logger().info('Long-lived connection support enabled')
+        self.get_logger().info('Hold-to-move commands supported')
         
+    def update_loop(self):
+        """Main update loop - publishes status and checks for command timeouts"""
+        current_time = time.time()
+        
+        # Check for command timeout in manual mode
+        if (self.current_mode == 'manual' and 
+            self.is_moving and 
+            current_time - self.last_move_command_time > COMMAND_TIMEOUT):
+            
+            self.get_logger().info('Movement command timeout - stopping robot')
+            self.stop_robot()
+        
+        # Always publish current twist (even if it's zero)
+        self.cmd_vel_publisher.publish(self.current_twist)
+        
+        # Publish status every second
+        if int(current_time) != int(current_time - 0.1):
+            self.publish_status()
+    
     def publish_status(self):
         """Publish robot status periodically"""
         status = self.get_status()
@@ -86,7 +112,7 @@ class RobotControllerNode(Node):
             return f"MODE_ERROR:Invalid mode {mode}"
     
     def handle_move_command(self, direction):
-        """Handle movement commands"""
+        """Handle movement commands - supports continuous commands"""
         if self.current_mode != 'manual':
             return f"MOVE_ERROR:Not in manual mode (current: {self.current_mode})"
         
@@ -95,48 +121,49 @@ class RobotControllerNode(Node):
         if direction not in valid_directions:
             return f"MOVE_ERROR:Invalid direction {direction}"
         
-        self.get_logger().info(f'Moving: {direction}')
+        # Update last command time for timeout checking
+        self.last_move_command_time = time.time()
         
-        # Create Twist message
-        twist_msg = Twist()
+        # Only log when direction changes to avoid spam
+        if self.last_command != f"MOVE:{direction}":
+            self.get_logger().info(f'Movement command: {direction}')
         
-        # Execute movement
+        # Update current twist based on direction
         if direction == 'forward':
-            twist_msg.linear.x = self.linear_speed
-            twist_msg.angular.z = 0.0
+            self.current_twist.linear.x = self.linear_speed
+            self.current_twist.angular.z = 0.0
             self.is_moving = True
         elif direction == 'backward':
-            twist_msg.linear.x = -self.linear_speed
-            twist_msg.angular.z = 0.0
+            self.current_twist.linear.x = -self.linear_speed
+            self.current_twist.angular.z = 0.0
             self.is_moving = True
         elif direction == 'left':
-            twist_msg.linear.x = 0.0
-            twist_msg.angular.z = self.angular_speed
+            self.current_twist.linear.x = 0.0
+            self.current_twist.angular.z = self.angular_speed
             self.is_moving = True
         elif direction == 'right':
-            twist_msg.linear.x = 0.0
-            twist_msg.angular.z = -self.angular_speed
+            self.current_twist.linear.x = 0.0
+            self.current_twist.angular.z = -self.angular_speed
             self.is_moving = True
         elif direction == 'stop':
-            twist_msg.linear.x = 0.0
-            twist_msg.angular.z = 0.0
+            self.current_twist.linear.x = 0.0
+            self.current_twist.angular.z = 0.0
             self.is_moving = False
         
-        # Publish movement command
-        self.cmd_vel_publisher.publish(twist_msg)
-        
+        # The actual publishing happens in update_loop for consistency
         return f"MOVE_OK:{direction}"
     
     def stop_robot(self):
         """Stop all robot movement"""
         self.is_moving = False
-        self.get_logger().info('Stopping robot')
+        self.current_twist.linear.x = 0.0
+        self.current_twist.angular.z = 0.0
         
-        # Publish stop command
-        twist_msg = Twist()
-        twist_msg.linear.x = 0.0
-        twist_msg.angular.z = 0.0
-        self.cmd_vel_publisher.publish(twist_msg)
+        # Publish stop command immediately
+        self.cmd_vel_publisher.publish(self.current_twist)
+        
+        if self.last_command != "MOVE:stop":
+            self.get_logger().info('Robot stopped')
     
     def start_auto_mode(self):
         """Initialize autonomous mode"""
@@ -166,6 +193,9 @@ class RobotControllerNode(Node):
             'last_command': self.last_command,
             'command_count': self.command_count,
             'uptime': round(uptime, 1),
+            'linear_speed': self.current_twist.linear.x,
+            'angular_speed': self.current_twist.angular.z,
+            'last_move_time': self.last_move_command_time,
             'timestamp': datetime.now().isoformat()
         }
     
@@ -176,7 +206,9 @@ class RobotControllerNode(Node):
             self.last_command = command_str
             self.command_count += 1
             
-            self.get_logger().info(f'Command #{self.command_count}: {command_str}')
+            # Only log non-movement commands to avoid spam
+            if not command_str.startswith('MOVE:'):
+                self.get_logger().info(f'Command #{self.command_count}: {command_str}')
             
             if ':' in command_str:
                 command_type, command_value = command_str.split(':', 1)
@@ -208,6 +240,8 @@ class RobotServer:
         self.robot_node = robot_node
         self.server_socket = None
         self.running = False
+        self.active_clients = []
+        self.client_lock = threading.Lock()
     
     def start(self):
         """Start the socket server"""
@@ -224,6 +258,7 @@ class RobotServer:
             
             self.robot_node.get_logger().info(f'Server listening on {HOST}:{PORT}')
             self.robot_node.get_logger().info(f'Max connections: {MAX_CONNECTIONS}')
+            self.robot_node.get_logger().info('Long-lived connections enabled')
             
             self.running = True
             
@@ -231,6 +266,10 @@ class RobotServer:
                 try:
                     # Accept incoming connection
                     client_socket, client_address = self.server_socket.accept()
+                    
+                    # Add to active clients
+                    with self.client_lock:
+                        self.active_clients.append(client_socket)
                     
                     # Handle client in separate thread
                     client_thread = threading.Thread(
@@ -253,37 +292,77 @@ class RobotServer:
             self.cleanup()
     
     def handle_client(self, client_socket, client_address):
-        """Handle individual client connection"""
-        self.robot_node.get_logger().info(f'New connection from {client_address}')
+        """Handle individual client connection with support for long-lived connections"""
+        self.robot_node.get_logger().info(f'New long-lived connection from {client_address}')
+        
+        # Set socket timeout for non-blocking operations
+        client_socket.settimeout(0.1)
         
         try:
             while self.running:
-                # Receive data from client
-                data = client_socket.recv(1024)
-                if not data:
+                try:
+                    # Use select to check for available data
+                    ready, _, _ = select.select([client_socket], [], [], 0.1)
+                    
+                    if ready:
+                        # Receive data from client
+                        data = client_socket.recv(1024)
+                        if not data:
+                            break
+                        
+                        command = data.decode('utf-8').strip()
+                        
+                        # Process command
+                        response = self.robot_node.process_command(command)
+                        
+                        # Send response back to client
+                        try:
+                            client_socket.send(response.encode('utf-8'))
+                        except socket.error:
+                            # Client disconnected
+                            break
+                        
+                        # Only log non-movement responses to avoid spam
+                        if not command.startswith('MOVE:'):
+                            self.robot_node.get_logger().info(f'Response to {client_address}: {response}')
+                    
+                    # Small delay to prevent busy waiting
+                    time.sleep(0.01)
+                    
+                except socket.timeout:
+                    # No data available, continue loop
+                    continue
+                except ConnectionResetError:
+                    self.robot_node.get_logger().info(f'Connection reset by {client_address}')
                     break
-                
-                command = data.decode('utf-8')
-                
-                # Process command
-                response = self.robot_node.process_command(command)
-                
-                # Send response back to client
-                client_socket.send(response.encode('utf-8'))
-                
-                self.robot_node.get_logger().info(f'Response to {client_address}: {response}')
-                
-        except ConnectionResetError:
-            self.robot_node.get_logger().info(f'Connection reset by {client_address}')
+                except Exception as e:
+                    self.robot_node.get_logger().error(f'Error handling client {client_address}: {e}')
+                    break
+                    
         except Exception as e:
-            self.robot_node.get_logger().error(f'Error handling client {client_address}: {e}')
+            self.robot_node.get_logger().error(f'Client handler error for {client_address}: {e}')
         finally:
+            # Remove from active clients
+            with self.client_lock:
+                if client_socket in self.active_clients:
+                    self.active_clients.remove(client_socket)
+            
             client_socket.close()
-            self.robot_node.get_logger().info(f'Connection closed with {client_address}')
+            self.robot_node.get_logger().info(f'Long-lived connection closed with {client_address}')
     
     def stop(self):
         """Stop the server"""
         self.running = False
+        
+        # Close all active client connections
+        with self.client_lock:
+            for client_socket in self.active_clients:
+                try:
+                    client_socket.close()
+                except:
+                    pass
+            self.active_clients.clear()
+        
         if self.server_socket:
             self.server_socket.close()
     
@@ -291,12 +370,24 @@ class RobotServer:
         """Cleanup resources"""
         self.robot_node.get_logger().info('Cleaning up server...')
         self.robot_node.stop_robot()
+        
+        # Close all connections
+        with self.client_lock:
+            for client_socket in self.active_clients:
+                try:
+                    client_socket.close()
+                except:
+                    pass
+            self.active_clients.clear()
+        
         if self.server_socket:
             self.server_socket.close()
 
 def main(args=None):
     """Main function"""
     print("🤖 ROS2 Robot Controller Server Starting...")
+    print("🔗 Long-lived Connection Support Enabled")
+    print("👆 Hold-to-Move Commands Supported")
     print("=" * 50)
     
     # Initialize ROS2
@@ -319,6 +410,10 @@ def main(args=None):
         robot_node.get_logger().info('  - /cmd_vel (geometry_msgs/Twist)')
         robot_node.get_logger().info('  - /robot_mode (std_msgs/String)')
         robot_node.get_logger().info('  - /robot_status (std_msgs/String)')
+        robot_node.get_logger().info('Features enabled:')
+        robot_node.get_logger().info('  - Long-lived connections')
+        robot_node.get_logger().info('  - Hold-to-move commands')
+        robot_node.get_logger().info('  - Command timeout safety')
         robot_node.get_logger().info('Web interface available at: http://localhost:5000')
         
         # Spin the node

@@ -333,14 +333,62 @@
                 });
             });
         }
+        function sendMoveStart(direction) {
+            fetch('/move_start', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ direction })
+            });
+        }
+        function sendMoveOnce(direction) {
+            fetch('/move', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ direction })
+            });
+        }
+        
+        function sendMoveStop() {
+            fetch('/move_stop', {
+                method: 'POST'
+            });
+        }
 
         function setupMovementButtons() {
             const moveButtons = document.querySelectorAll('.move-btn');
             moveButtons.forEach(button => {
-                button.addEventListener('click', function() {
-                    const direction = this.dataset.direction;
-                    moveRobot(direction);
+                const direction = button.dataset.direction;
+                let interval = null;
+
+                const startMoving = () => {
+                    if (currentMode !== 'manual') return;
+
+                    // Skip stop button – we send it on release only
+                    if (direction !== 'stop') {
+                        sendMoveStart(direction);
+                        interval = setInterval(() => sendMoveStart(direction), 100); // repeat every 100ms
+                    } else {
+                        sendMoveOnce('stop');
+                    }
+                };
+
+                const stopMoving = () => {
+                    if (interval) {
+                        clearInterval(interval);
+                        interval = null;
+                    }
+                    sendMoveStop();
+                };
+
+                button.addEventListener('mousedown', startMoving);
+                button.addEventListener('touchstart', e => {
+                    e.preventDefault();
+                    startMoving();
                 });
+
+                button.addEventListener('mouseup', stopMoving);
+                button.addEventListener('mouseleave', stopMoving);
+                button.addEventListener('touchend', stopMoving);
             });
         }
 
