@@ -15,7 +15,6 @@ import rclpy
 from rclpy.node import Node
 from std_msgs.msg import String
 from geometry_msgs.msg import Twist
-from sensor_msgs.msg import Joy
 
 # Configuration
 HOST = '0.0.0.0'  # Listen on all interfaces
@@ -38,14 +37,6 @@ class RobotControllerNode(Node):
         self.mode_publisher = self.create_publisher(String, '/robot_mode', 10)
         self.status_publisher = self.create_publisher(String, '/robot_status', 10)
         
-        # Create subscribers for feedback
-        self.joy_subscription = self.create_subscription(
-            Joy,
-            '/joy',
-            self.joy_callback,
-            10
-        )
-        
         # Movement parameters
         self.linear_speed = 0.5  # m/s
         self.angular_speed = 1.0  # rad/s
@@ -54,12 +45,8 @@ class RobotControllerNode(Node):
         self.status_timer = self.create_timer(1.0, self.publish_status)
         
         self.get_logger().info('ROS2 Robot Controller Node initialized')
+        self.get_logger().info('Waiting for commands from web server at localhost:5000')
         
-    def joy_callback(self, msg):
-        """Handle joystick input (if connected)"""
-        # This can be used to override web commands with joystick input
-        pass
-    
     def publish_status(self):
         """Publish robot status periodically"""
         status = self.get_status()
@@ -154,16 +141,16 @@ class RobotControllerNode(Node):
     def start_auto_mode(self):
         """Initialize autonomous mode"""
         self.get_logger().info('Starting autonomous mode')
-        # Publish mode change for other nodes to handle autonomous behavior
-        # You can create separate nodes for autonomous navigation
-        # Example topics: /goal_pose, /navigate_to_goal, etc.
+        # This mode can be handled by other ROS2 nodes
+        # Example: navigation stack, path planning nodes
+        # The mode change is published to /robot_mode topic
     
     def start_follow_mode(self):
         """Initialize follow mode"""
         self.get_logger().info('Starting follow mode')
-        # Publish mode change for other nodes to handle following behavior
-        # You can create separate nodes for object tracking/following
-        # Example topics: /follow_target, /person_detection, etc.
+        # This mode can be handled by other ROS2 nodes
+        # Example: person detection, object tracking nodes
+        # The mode change is published to /robot_mode topic
     
     def stop_auto_behaviors(self):
         """Stop any autonomous behaviors"""
@@ -327,10 +314,12 @@ def main(args=None):
         server_thread.start()
         
         robot_node.get_logger().info('ROS2 Robot Controller ready!')
-        robot_node.get_logger().info('Publishing to topics:')
+        robot_node.get_logger().info('Listening for web commands on port 8888')
+        robot_node.get_logger().info('Publishing to ROS2 topics:')
         robot_node.get_logger().info('  - /cmd_vel (geometry_msgs/Twist)')
         robot_node.get_logger().info('  - /robot_mode (std_msgs/String)')
         robot_node.get_logger().info('  - /robot_status (std_msgs/String)')
+        robot_node.get_logger().info('Web interface available at: http://localhost:5000')
         
         # Spin the node
         rclpy.spin(robot_node)

@@ -8,7 +8,7 @@ app = Flask(__name__)
 # Global variables to track robot state
 current_mode = "manual"
 robot_status = "disconnected"
-pi_ip = "192.168.1.100"  # Default Pi IP - change this to your Pi's IP
+pi_ip = "192.168.16.154"  # Default Pi IP - change this to your Pi's IP
 pi_port = 8888
 
 @app.route('/')

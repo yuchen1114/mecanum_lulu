@@ -137,7 +137,7 @@ def send_batch_commands(pi_ip, pi_port, commands, delay=0.1):
 # Test function
 if __name__ == "__main__":
     # Test the socket client
-    test_ip = "192.168.1.100"  # Change to your Pi's IP
+    test_ip = "192.168.16.154"  # Change to your Pi's IP
     test_port = 8888
     
     print("🔌 Testing socket connection...")
