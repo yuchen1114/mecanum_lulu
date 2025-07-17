@@ -1,3 +1,7 @@
+/*
+調參數用
+*/
+
 #include <Arduino.h>
 #include "esp32-hal-ledc.h"  // Add this line for ESP32 LEDC functions
 

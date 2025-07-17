@@ -1,3 +1,7 @@
+'''
+on PC
+along with other files
+'''
 from flask import Flask, render_template, request, jsonify
 import socket_client
 import threading

@@ -1,3 +1,8 @@
+'''
+on rasperri5
+independant
+'''
+
 #!/usr/bin/env python3
 """
 ROS2 Robot Controller Server - Updated for Long-lived Connections

@@ -1,3 +1,8 @@
+/*
+將UART收到的訊息發到自訂網頁檢視訊息
+*/
+
+
 //IP fixed as 192.168.16.184
 
 #include <WiFi.h>
