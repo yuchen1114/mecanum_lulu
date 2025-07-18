@@ -31,6 +31,8 @@ void handleRoot() {
 
 void setup() {
   Serial.begin(115200);  // Debug serial
+  delay(1000);  // 等待串口初始化
+  Serial.println("ESP32 starting...");
   
   // 初始化 UART2，使用 GPIO16(RX), GPIO17(TX)
   Serial2.begin(115200, SERIAL_8N1, 16, 17);  // baud, config, RX pin, TX pin
