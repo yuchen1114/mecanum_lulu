@@ -1,4 +1,4 @@
-# mecanum\_lulu
+# mecanum_lulu
 
 A smart Mecanum-wheeled robot platform for experimentation and AI integration.
 
@@ -6,10 +6,11 @@ A smart Mecanum-wheeled robot platform for experimentation and AI integration.
 
 `mecanum_lulu` is a personal robotics project aiming to build a triangular Mecanum-wheeled robot platform. The project is divided into multiple stages:
 
-1. **Basic Motor Control**: Initial motor driver testing, encoder reading, and motion control.
-2. **Sensor Integration**: Add ultrasonic sensors, IMU, and camera (future stage).
-3. **AI Integration**: Develop computer vision and RL-based navigation.
-4. **Remote Control & Communication**: Integrate remote control via Wi-Fi and app.
+1. **Basic Motor Control**: Initial motor driver testing, encoder reading, and motion control with PID implementation.
+2. **Sensor Integration**: Add ultrasonic sensors, IMU, and camera for environmental awareness.
+3. **AI Integration**: Develop computer vision and RL-based navigation algorithms.
+4. **Communication**: Establish robust communication between Raspberry Pi 5 and NodeMCU-32S.
+5. **Remote Control**: Integrate remote control via Wi-Fi and web-based interface.
 
 ---
 
@@ -18,65 +19,101 @@ A smart Mecanum-wheeled robot platform for experimentation and AI integration.
 ```
 / (root)
 │
-├── README.md               # Project introduction
+├── README.md               # Project introduction and documentation
 ├── LICENSE                 # MIT License file
-├── docs/                   # Design documents, specs, diagrams
-│   └── architecture.md     # System architecture diagrams
+├── docs/                   # Design documents, specifications, diagrams
+│   ├── architecture.md     # System architecture diagrams and design decisions
+│   └── TODO.txt            # Future developments and feature roadmap
 │
-├── hardware/               # Hardware designs
-│   ├── schematics/         # Electrical schematics
-│   ├── pcb/                # PCB files (if any)
-│   └── chassis-design/     # CAD files for chassis
+├── hardware/               # Hardware designs and schematics
+│   ├── README.md           # Hardware documentation and assembly instructions
+│   ├── MCU/                # ESP32/NodeMCU circuit designs and connections
+│   ├── raspberry_pi/       # Raspberry Pi 5 interfacing and GPIO configurations
+│   ├── circuit_diagram/    # Complete system wiring diagrams
+│   └── motor/              # Motor driver circuits and encoder wiring
 │
-├── firmware/               # ESP32 / microcontroller code
-│   └── src/                # Source code for motor, sensor control
-│
-├── software/               # Higher-level control (AI, remote control)
-│   └── vision/             # Computer vision models (future)
-│
-├── tests/                  # Test scripts for hardware/software modules
-│                           # (e.g. motor_test.ino, encoder_read.py)
+├── src/                    # Source code for all components
+│   ├── developing/         # Experimental and testing code
+│   │   ├── firmware/       # Low-level firmware for motor control and sensors
+│   │   └── software/       # High-level software for AI and navigation
+│   ├── esp32/              # ESP32/NodeMCU code for motor control and sensor reading
+│   └── raspberry/          # Raspberry Pi code for AI processing and communication
 │
 └── data/                   # Experiment logs, sensor readings, AI training data
-│                           # (e.g. motor_speed_log.csv, imu_calibration.json)
+                           # (e.g., motor_speed_log.csv, imu_calibration.json, training_datasets/)
 ```
 
 ---
 
 ## Current Hardware
 
-- Chassis: Triangular mecanum wheel design (custom acrylic)
-- Motors: 3 DC motors with encoders
-- Servo: MG996R (for potential sail or manipulator)
-- Controller: ESP32 (motor + sensor control)
-- Computer: Raspberry Pi (for future AI tasks)
-- Power: 3.7V (controller), 7.4V (motors/servo)
+- **Chassis**: Three-wheeled mecanum wheel design (custom acrylic frame)
+- **Motors**: 3x DC motors with encoders (JGB37-520 12V geared motors)
+- **MCU**: NodeMCU-32S (ESP32) for real-time motor control and sensor interfacing
+- **Computer**: Raspberry Pi 5 (for AI processing, computer vision, and high-level control)
+- **Sensors**: HC-SR04 ultrasonic sensors for obstacle detection
+- **Power**: Dual power supply - 5V for MCU/Pi, 12V for motors
+- **Communication**: Wi-Fi between Pi and ESP32, serial communication for debugging
 
 ---
 
 ## Development Phases
 
-### Phase 1 - Basic Control
+### Phase 1 - Basic Control ✅
+- **Motor PID Control**: Implemented closed-loop speed control for precise movement
+- **Encoder Integration**: Real-time position and velocity feedback
+- **Mecanum Kinematics**: Translation and rotation control algorithms
+- **Safety Features**: Motor stall detection and emergency stop functionality
 
--
+### Phase 2 - Sensor Integration 🔄
+- **Ultrasonic Sensors**: HC-SR04 for 360-degree obstacle detection
+- **Odometry System**: Dead reckoning using encoder data and IMU fusion
+- **Web Camera**: Real-time video streaming for remote monitoring
+- **IMU Integration**: Gyroscope and accelerometer for orientation tracking
 
-### Phase 2 - Sensor Integration
+### Phase 3 - AI Integration 📋
+- **YOLO Implementation**: Object detection and recognition
+- **Path Planning**: A* or RRT algorithms for autonomous navigation
+- **SLAM**: Simultaneous Localization and Mapping
+- **Reinforcement Learning**: Adaptive navigation behavior
 
--
-
-### Phase 3 - AI Integration
-
--
-
-### Phase 4 - Remote Control
-
--
+### Phase 4 - Remote Control 📋
+- **Web Interface**: Browser-based control panel with live video feed
+- **Mobile App**: iOS/Android app for remote operation
+- **Telemetry**: Real-time sensor data visualization
+- **Mission Planning**: Waypoint navigation and automated tasks
 
 ---
 
 ## Setup Instructions
 
-> *To be filled as development progresses*
+### Hardware Setup
+1. **Power Supply**: Connect 12V for motors, 5V for electronics
+2. **Motor Connections**: Wire JGB37-520 motors to motor driver shields
+3. **Encoder Wiring**: Connect encoder outputs to ESP32 interrupt pins
+4. **Sensor Mounting**: Install HC-SR04 sensors at strategic positions
+5. **Communication**: Establish Wi-Fi connection between Pi and ESP32
+
+### Software Setup
+1. **ESP32 Environment**: Install Arduino IDE with ESP32 board support
+2. **Raspberry Pi**: Set up Raspberry Pi OS with Python 3.9+
+3. **Dependencies**: Install required libraries (OpenCV, TensorFlow, etc.)
+4. **Calibration**: Run motor calibration and sensor alignment procedures
+5. **Testing**: Verify all systems with provided test scripts
+
+### Quick Start
+```bash
+# Clone repository
+git clone https://github.com/[username]/mecanum_lulu.git
+cd mecanum_lulu
+
+# Upload ESP32 firmware
+# (Instructions for Arduino IDE upload)
+
+# Run Raspberry Pi software
+cd src/raspberry
+python3 main.py
+```
 
 ---
 
@@ -92,16 +129,36 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 
 ---
 
-## Notes
+## Technical Notes
 
-- Use single-core wires for minimal interference.
-- Use time-based control (sectional control) for sail control (optional subsystem).
-- Keep the chassis large to minimize tipping during movement.
+- **Wiring**: Use single-core wires for minimal electromagnetic interference
+- **Control Strategy**: Implement time-based sectional control for smooth operation
+- **Stability**: Maintain large chassis footprint to minimize tipping during aggressive maneuvers
+- **Safety**: Always implement emergency stop functionality in all control modes
+- **Debugging**: Use serial communication for real-time debugging and telemetry
+
+---
+
+## Contributing
+
+Contributions are welcome! Please feel free to submit pull requests or open issues for:
+- Bug fixes and improvements
+- New sensor integrations
+- AI algorithm implementations
+- Documentation updates
 
 ---
 
 ## Contact
 
-Developed by: **LU**
+**Developed by: LU**
 
-For questions or collaboration, open an issue on GitHub.
+For questions, collaboration, or technical discussions, please open an issue on GitHub or contact through the repository.
+
+---
+
+## Project Status
+
+🟢 **Active Development** - Currently in Phase 2 (Sensor Integration)
+
+Last Updated: July 2025
