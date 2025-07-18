@@ -16,10 +16,10 @@ class CmdVelUART(Node):
             10
         )
 
-        # Open UART over GPIO using /dev/serial0
+        # Open UART over GPIO using /dev/ttyAMA0
         try:
             self.ser = serial.Serial('/dev/ttyAMA0', 115200, timeout=1)  # GPIO14 (TX), GPIO15 (RX)
-            self.get_logger().info("Serial port opened on /dev/serial0 (GPIO14/15)")
+            self.get_logger().info("Serial port opened on /dev/ttyAMA0 (GPIO14/15)")
         except serial.SerialException as e:
             self.get_logger().error(f"Serial open failed: {e}")
             self.ser = None
@@ -30,17 +30,28 @@ class CmdVelUART(Node):
         uart_message = f"{linear:.2f},{angular:.2f}\n"
 
         if self.ser and self.ser.is_open:
-            self.ser.write(uart_message.encode('utf-8'))
-            self.get_logger().info(f"Sent over UART: {uart_message.strip()}")
+            try:
+                self.ser.write(uart_message.encode('utf-8'))
+                self.get_logger().info(f"Sent over UART: {uart_message.strip()}")
+            except serial.SerialException as e:
+                self.get_logger().error(f"Failed to send UART message: {e}")
         else:
             self.get_logger().warn("Serial port not available")
+
+    def __del__(self):
+        if hasattr(self, 'ser') and self.ser and self.ser.is_open:
+            self.ser.close()
 
 def main(args=None):
     rclpy.init(args=args)
     node = CmdVelUART()
-    rclpy.spin(node)
-    node.destroy_node()
-    rclpy.shutdown()
+    try:
+        rclpy.spin(node)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        node.destroy_node()
+        rclpy.shutdown()
 
 if __name__ == '__main__':
     main()
