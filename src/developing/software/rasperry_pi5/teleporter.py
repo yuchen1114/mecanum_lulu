@@ -25,9 +25,10 @@ class CmdVelUART(Node):
             self.ser = None
 
     def listener_callback(self, msg):
-        linear = msg.linear.x
+        linear_x = msg.linear.x
+        linear_y = msg.linear.y
         angular = msg.angular.z
-        uart_message = f"{linear:.2f},{angular:.2f}\n"
+        uart_message = f"{linear_x:.2f},{linear_y:.2f},{angular:.2f}\n"
 
         if self.ser and self.ser.is_open:
             try:
