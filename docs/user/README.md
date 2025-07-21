@@ -1,15 +1,11 @@
 # User instruction
 ## Manual mode
+
 '''
-### necessary ones
-ros2 run core_msg teleporter
-### choose one of below
-1. 
+ros2 run core_msg teleporter # necessary one
 ros2 run keyboard keyboard_node  #keyboard control
-2. 
 ros2 run server server #webcontroller #then choose MANUAL on server
-3.
-joystick TBD
+#joystick TBD
 '''
 
 ## Auto mode
