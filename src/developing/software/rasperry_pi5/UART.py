@@ -10,7 +10,8 @@ import rclpy
 from rclpy.node import Node
 from geometry_msgs.msg import Twist
 from std_msgs.msg import Header
-from communication.msg import MotorOdometry
+# from communication.msg import MotorOdometry
+from communication_interfaces.msg import MotorOdometry
 import serial
 import threading
 import time
