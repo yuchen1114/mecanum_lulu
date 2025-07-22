@@ -46,7 +46,7 @@ class RobotControllerNode(Node):
         self.status_publisher = self.create_publisher(String, '/robot_status', 10)
         
         # Movement parameters
-        self.linear_speed = 0.5  # m/s
+        self.linear_speed = 100  # mm/s
         self.angular_speed = 1.0  # rad/s
         
         # Timer for publishing status and checking command timeout
