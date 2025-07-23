@@ -11,14 +11,15 @@ import cv2
 import cv_bridge
 import numpy as np
 from ultralytics import YOLO
-from rclpy.qos import QoSProfile
+from rclpy.qos import QoSProfile, QoSReliabilityPolicy, QoSHistoryPolicy
 from rclpy.node import Node
 from sensor_msgs.msg import Image
 from custom_msg.msg import Sensordata
 
 # Configuration
-TARGET_Y = 320
-MODEL_PATH = "/home/mingyang/wheeltec_ros2/src/object_tracking/object_tracking/best.pt"
+TARGET_Y = 960
+MODEL_PATH = "/home/lulu/mecanum_lulu/log/YOLO_model/best0723.pt"
+# MODEL_PATH = "/home/mecanum_lulu/log/YOLO_model/best0723.pt"
 CONFIDENCE_THRESHOLD = 0.80
 
 class ObjectTracker:
@@ -75,13 +76,20 @@ class TrackerNode(Node):
         # Initialize tracker
         self.tracker = ObjectTracker()
         
-        # Setup QoS
-        qos = QoSProfile(depth=10)
+        # Setup QoS to match camera publisher
+        image_qos = QoSProfile(
+            reliability=QoSReliabilityPolicy.BEST_EFFORT,
+            history=QoSHistoryPolicy.KEEP_LAST,
+            depth=1
+        )
+        
+        # Setup QoS for sensor data publisher
+        sensor_qos = QoSProfile(depth=10)
         
         # Create publisher and subscriber
-        self.publisher = self.create_publisher(Sensordata, 'tracker_data', qos)
+        self.publisher = self.create_publisher(Sensordata, 'tracker_data', sensor_qos)
         self.subscription = self.create_subscription(
-            Image, '/image_raw', self.image_callback, qos)
+            Image, '/image_raw', self.image_callback, image_qos)
     
     def image_callback(self, msg):
         """Process incoming image and publish tracking data"""
