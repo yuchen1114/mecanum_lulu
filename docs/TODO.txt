@@ -5,4 +5,4 @@
 ---------software------------
 1. node for follow mode (marker TBD)
 2. node for auto mode (purpose TBD)
-3. 
+3. sync server.py with ras

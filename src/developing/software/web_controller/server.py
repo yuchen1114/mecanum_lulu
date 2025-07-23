@@ -5,7 +5,7 @@ independant
 
 #!/usr/bin/env python3
 """
-ROS2 Robot Controller Server - Updated for Long-lived Connections
+ROS2 Robot Controller Server -  Long-lived Connections
 This script runs on the Raspberry Pi and listens for commands from the web controller,
 then publishes them to ROS2 topics. Supports continuous command streams.
 """
@@ -162,6 +162,11 @@ class RobotControllerNode(Node):
         """Stop all robot movement"""
         self.is_moving = False
         self.current_twist.linear.x = 0.0
+        self.current_twist.linear.y = 0.0
+        '''
+        TODO:
+        sync this part to raspberry
+        '''
         self.current_twist.angular.z = 0.0
         
         # Publish stop command immediately

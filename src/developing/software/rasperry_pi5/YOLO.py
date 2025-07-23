@@ -14,7 +14,7 @@ from ultralytics import YOLO
 from rclpy.qos import QoSProfile, QoSReliabilityPolicy, QoSHistoryPolicy
 from rclpy.node import Node
 from sensor_msgs.msg import Image
-from custom_msg.msg import Sensordata
+from custom_msg.msg import Sensordata #float64
 
 # Configuration
 TARGET_Y = 960
