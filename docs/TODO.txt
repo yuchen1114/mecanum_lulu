@@ -1,14 +1,9 @@
 ---------hardware------------
-1. battery holder with button and convert to 5V
-2. 
+ultrasonic's echo pins
 
 ---------software------------
-1. node for follow mode (marker TBD)
-2. node for auto mode (purpose TBD)
-3. sync server.py with ras
+not well detecting kirby
+PID
+server to be tested
 
 
----ASAP---
-1. auto mode
-2. PID
-3. ultrasonic sensor
