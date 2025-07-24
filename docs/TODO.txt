@@ -6,3 +6,9 @@
 1. node for follow mode (marker TBD)
 2. node for auto mode (purpose TBD)
 3. sync server.py with ras
+
+
+---ASAP---
+1. auto mode
+2. PID
+3. ultrasonic sensor

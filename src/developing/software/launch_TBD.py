@@ -55,7 +55,7 @@ def generate_launch_description():
             output='screen',
             parameters=[{
                 'video_device': '/dev/video0',
-                'image_size': [640, 480],
+                'image_size': [1920, 1080],
                 'pixel_format': 'YUYV',
                 'io_method': 'mmap',
                 'framerate': 30.0,
@@ -63,8 +63,7 @@ def generate_launch_description():
                 'use_sim_time': use_sim_time
             }],
             remappings=[
-                ('image_raw', '/image_raw'),
-                ('image_raw/compressed', '/image_raw/compressed')
+                ('image_raw', '/image_raw')
             ]
         ),
         

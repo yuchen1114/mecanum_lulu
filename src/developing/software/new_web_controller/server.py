@@ -45,8 +45,9 @@ class EnhancedRobotControllerNode(Node):
         self.status_publisher = self.create_publisher(String, '/robot_status', 10)
         
         # Create subscribers
+        # Subscribe to raw image - we'll compress it ourselves for better control
         self.image_subscriber = self.create_subscription(
-            CompressedImage, '/image_raw/compressed', self.image_callback, 10
+            Image, '/image_raw', self.image_callback, 10
         )
         
         # Subscribe to ultrasonic sensors
@@ -92,9 +93,8 @@ class EnhancedRobotControllerNode(Node):
     def image_callback(self, msg):
         """Handle incoming camera images"""
         try:
-            # Convert compressed image to CV2 format
-            np_arr = np.frombuffer(msg.data, np.uint8)
-            cv_image = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
+            # Convert ROS Image to CV2 format
+            cv_image = self.bridge.imgmsg_to_cv2(msg, "bgr8")
             
             with self.image_lock:
                 self.latest_image = cv_image
@@ -338,8 +338,8 @@ class EnhancedRobotControllerNode(Node):
             return
         
         # Proportional control based on error from center
-        error_threshold = 20  # pixels
-        max_error = 320  # half of 640 width
+        error_threshold = 50  # pixels (increased for 1080p)
+        max_error = 960  # half of 1920 width
         
         if abs(self.tracker_error) < error_threshold:
             # Object centered - move forward
@@ -462,8 +462,12 @@ class VideoStreamServer(threading.Thread):
             while self.running:
                 with self.robot_node.image_lock:
                     if self.robot_node.latest_image is not None:
-                        # Encode image as JPEG
-                        _, buffer = cv2.imencode('.jpg', self.robot_node.latest_image)
+                        # Resize image for streaming (1920x1080 -> 960x540)
+                        resized = cv2.resize(self.robot_node.latest_image, (960, 540))
+                        
+                        # Encode image as JPEG with quality setting
+                        encode_param = [int(cv2.IMWRITE_JPEG_QUALITY), 80]
+                        _, buffer = cv2.imencode('.jpg', resized, encode_param)
                         frame_data = buffer.tobytes()
                         
                         # Send to all connected clients

@@ -84,9 +84,10 @@
 
         #video-stream {
             max-width: 100%;
-            width: 640px;
-            height: 480px;
+            width: 960px;  /* 50% of 1920 for better web display */
+            height: 540px; /* 50% of 1080 */
             display: block;
+            object-fit: contain;
         }
 
         .video-overlay {
