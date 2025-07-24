@@ -31,8 +31,8 @@ SENSOR_CONFIG = {
         'angle': 0  # degrees from front
     },
     'right': {
-        'trig': 5,
-        'echo': 6,
+        'trig': 6,
+        'echo': 16,
         'frame_id': 'ultrasonic_right',
         'field_of_view': 0.26,
         'angle': -120  # degrees from front
