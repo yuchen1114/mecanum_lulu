@@ -5,6 +5,9 @@
 ---------software------------
 1. cam resolution
 2. server and yolo mismatch error's datatype
+3. PID
+4. velocity and error threshold
+5. distance threshold(optional)
 
 ---ASAP---
 1.
