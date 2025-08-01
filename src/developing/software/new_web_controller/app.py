@@ -1,6 +1,6 @@
 '''
-Enhanced Robot Controller Flask App
-Runs on PC with video streaming, gyro control, and sensor data
+Robot Controller Flask App
+Runs on PC with video streaming, gyro control, and object following
 '''
 from flask import Flask, render_template, request, jsonify, Response
 import socket_client
@@ -8,10 +8,7 @@ import threading
 import time
 import cv2
 import numpy as np
-import base64
 from collections import deque
-import io
-from PIL import Image
 
 app = Flask(__name__)
 
@@ -30,8 +27,7 @@ video_frame = None
 frame_lock = threading.Lock()
 video_client = None
 
-# Sensor data cache
-sensor_data = {'left': 0, 'center': 0, 'right': 0, 'status': 'Initializing...'}
+# Tracking data cache for follow mode
 tracking_data = {'status': 'Searching...', 'error': 0, 'action': 'Waiting...'}
 data_lock = threading.Lock()
 
@@ -49,10 +45,8 @@ def initialize_robot_client():
         def on_response(command, response, success):
             print(f"📥 Pi response to '{command}': {response}")
             
-            # Parse sensor data from responses
-            if "SENSOR_DATA:" in response:
-                parse_sensor_data(response)
-            elif "TRACKING_DATA:" in response:
+            # Parse tracking data from responses
+            if "TRACKING_DATA:" in response:
                 parse_tracking_data(response)
         
         def on_connection(connected, message):
@@ -72,25 +66,6 @@ def initialize_robot_client():
         else:
             print(f"❌ Failed to connect to Pi at {pi_ip}:{pi_port}")
             return False
-
-def parse_sensor_data(response):
-    """Parse sensor data from response"""
-    global sensor_data
-    try:
-        # Expected format: SENSOR_DATA:left=XX,center=XX,right=XX,status=XXX
-        data_part = response.split("SENSOR_DATA:")[1]
-        parts = data_part.split(",")
-        
-        with data_lock:
-            for part in parts:
-                if "=" in part:
-                    key, value = part.split("=")
-                    if key in ['left', 'center', 'right']:
-                        sensor_data[key] = float(value)
-                    elif key == 'status':
-                        sensor_data['status'] = value
-    except Exception as e:
-        print(f"Error parsing sensor data: {e}")
 
 def parse_tracking_data(response):
     """Parse tracking data from response"""
@@ -225,7 +200,7 @@ def set_mode():
     data = request.get_json()
     mode = data.get('mode', 'manual')
     
-    valid_modes = ['manual', 'auto', 'follow', 'gyro']
+    valid_modes = ['manual', 'follow', 'gyro']
     if mode in valid_modes:
         current_mode = mode
         
@@ -378,12 +353,6 @@ def gyro_control():
             'connected': False
         }), 500
 
-@app.route('/sensor_data')
-def get_sensor_data():
-    """Get ultrasonic sensor data"""
-    with data_lock:
-        return jsonify(sensor_data)
-
 @app.route('/tracking_data')
 def get_tracking_data():
     """Get object tracking data"""
@@ -446,7 +415,7 @@ def reconnect():
     })
 
 if __name__ == '__main__':
-    print("🤖 Enhanced Robot Controller Web App Starting...")
+    print("🤖 Robot Controller Web App Starting...")
     print(f"📡 Pi IP: {pi_ip}:{pi_port}")
     print("🌐 Web interface will be available at: http://localhost:5000")
     print("📹 Video streaming enabled")

@@ -5,7 +5,6 @@ This enhanced robot controller system provides:
 - **Real-time video streaming** from the robot's camera
 - **Manual control** with keyboard and mouse/touch input
 - **Gyro control** using phone orientation
-- **Autonomous navigation** using ultrasonic sensors
 - **Object following** mode with color-based tracking
 - **Web-based interface** accessible from any device
 
@@ -29,22 +28,15 @@ This enhanced robot controller system provides:
 
 #### Raspberry Pi:
 ```bash
-# Install ROS2 Humble
-# Follow: https://docs.ros.org/en/humble/Installation/Ubuntu-Install-Debians.html
+# Install ROS2 jazzy
+# Follow: https://docs.ros.org/en/jazzy/Installation/Ubuntu-Install-Debs.html
 
-# Install Python packages
-pip3 install opencv-python numpy RPi.GPIO
-
-# Install camera package
-sudo apt install ros-humble-v4l2-camera
-# OR
-sudo apt install ros-humble-usb-cam
 ```
 
 #### PC:
 ```bash
 # Install Python packages
-pip3 install flask opencv-python numpy pillow
+pip3 install flask numpy pillow
 ```
 
 ## Setup Instructions
@@ -52,7 +44,7 @@ pip3 install flask opencv-python numpy pillow
 ### 1. Configure Network
 Make sure your PC and Raspberry Pi are on the same network. Update the IP address in `config.py`:
 ```python
-PI_IP = "192.168.16.154"  # Your Pi's IP address
+PI_IP = " Your Pi's IP address"  
 ```
 
 ### 2. Set Up Raspberry Pi
@@ -70,9 +62,7 @@ ros2 pkg create --build-type ament_python robot_controller
 
 3. **Copy scripts to package:**
 ```bash
-cp enhanced_server.py ~/robot_ws/src/robot_controller/robot_controller/
-cp ultrasonic_sensors.py ~/robot_ws/src/robot_controller/robot_controller/
-cp object_tracker.py ~/robot_ws/src/robot_controller/robot_controller/
+cp server.py ~/robot_ws/src/robot_controller/robot_controller/
 ```
 
 4. **Update setup.py:**
@@ -80,9 +70,7 @@ Add entry points for your scripts:
 ```python
 entry_points={
     'console_scripts': [
-        'enhanced_server = robot_controller.enhanced_server:main',
-        'ultrasonic_sensors = robot_controller.ultrasonic_sensors:main',
-        'object_tracker = robot_controller.object_tracker:main',
+        'server = robot_controller.server:main',
     ],
 },
 ```
@@ -125,18 +113,14 @@ ros2 launch robot_controller robot_launch.py
 #### Option 2: Manual Start
 ```bash
 # Terminal 1 - Main server
-ros2 run robot_controller enhanced_server
+ros2 run robot_controller server
 
-# Terminal 2 - Ultrasonic sensors
-ros2 run robot_controller ultrasonic_sensors
-
-# Terminal 3 - Camera (choose one)
+# Terminal 2 - Camera 
 ros2 run v4l2_camera v4l2_camera_node --ros-args -p video_device:=/dev/video0
-# OR
-ros2 run usb_cam usb_cam_node_exe
 
-# Terminal 4 - Object tracker (optional)
-ros2 run robot_controller object_tracker
+# Terminal 3 - YOLO 
+ros2 run image_processing YOLO
+
 ```
 
 ### On PC:
@@ -156,17 +140,13 @@ Then open a web browser and go to: `http://localhost:5000`
    - Click/touch movement buttons
    - Hold buttons for continuous movement
 
-2. **Auto Mode**
-   - Robot navigates autonomously using ultrasonic sensors
-   - Avoids obstacles and explores environment
-   - Displays sensor readings in real-time
 
-3. **Follow Mode**
+2. **Follow Mode**
    - Tracks and follows colored objects
    - Default: tracks red objects
    - Configure color in object_tracker.py
 
-4. **Gyro Mode**
+3. **Gyro Mode**
    - Tilt your phone to control robot
    - Forward/back: tilt phone forward/backward
    - Left/right: tilt phone left/right
@@ -189,12 +169,7 @@ Then open a web browser and go to: `http://localhost:5000`
    - Check firewall settings
    - Ensure ports 8888 and 8889 are open
 
-3. **Ultrasonic sensors not working:**
-   - Check GPIO connections
-   - Verify pin numbers in ultrasonic_sensors.py
-   - Run `gpio readall` to check pin states
-
-4. **Gyro mode not working:**
+3. **Gyro mode not working:**
    - HTTPS required for device orientation API
    - Click "Enable Gyro Control" button
    - Allow permission when prompted
@@ -202,24 +177,12 @@ Then open a web browser and go to: `http://localhost:5000`
 ## Customization
 
 ### Change Movement Speed
-In `enhanced_server.py`:
+In `server.py`:
 ```python
 self.linear_speed = 0.2  # m/s
 self.angular_speed = 1.0  # rad/s
 ```
 
-### Change Tracking Color
-In `object_tracker.py`:
-```python
-self.declare_parameter('target_color', 'red')  # Change to 'green', 'blue', 'yellow'
-```
-
-### Adjust Obstacle Detection
-In `enhanced_server.py`:
-```python
-obstacle_threshold = 0.3  # meters
-clear_threshold = 0.8     # meters
-```
 
 ### Modify Video Resolution
 In launch file or camera command:
@@ -232,7 +195,7 @@ In launch file or camera command:
 
 - Always have a way to stop the robot (STOP button or spacebar)
 - Test in a safe, open area first
-- Monitor sensor readings during autonomous modes
+- Monitor sensor readings
 - Ensure proper power supply for all components
 - Add emergency stop hardware if needed
 

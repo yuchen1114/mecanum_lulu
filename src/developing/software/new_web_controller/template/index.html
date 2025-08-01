@@ -84,8 +84,8 @@
 
         #video-stream {
             max-width: 100%;
-            width: 960px;  /* 50% of 1920 for better web display */
-            height: 540px; /* 50% of 1080 */
+            width: 960px;
+            height: 540px;
             display: block;
             object-fit: contain;
         }
@@ -238,45 +238,6 @@
             border-radius: 5px;
         }
 
-        /* Auto Mode Display */
-        .auto-display {
-            display: none;
-            background: #f8f9fa;
-            padding: 20px;
-            border-radius: 10px;
-            text-align: center;
-        }
-
-        .auto-display.active {
-            display: block;
-        }
-
-        .sensor-display {
-            display: flex;
-            justify-content: center;
-            gap: 20px;
-            margin: 20px 0;
-        }
-
-        .sensor-card {
-            background: white;
-            padding: 15px;
-            border-radius: 8px;
-            min-width: 120px;
-            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
-        }
-
-        .sensor-card h4 {
-            color: #667eea;
-            margin-bottom: 10px;
-        }
-
-        .sensor-value {
-            font-size: 1.5em;
-            font-weight: bold;
-            color: #333;
-        }
-
         /* Follow Mode Display */
         .follow-display {
             display: none;
@@ -426,9 +387,6 @@
                 <button class="mode-btn active" data-mode="manual">
                     🕹️ Manual
                 </button>
-                <button class="mode-btn" data-mode="auto">
-                    🤖 Auto
-                </button>
                 <button class="mode-btn" data-mode="follow">
                     👁️ Follow
                 </button>
@@ -474,31 +432,6 @@
             <button class="update-btn" onclick="requestGyroPermission()">Enable Gyro Control</button>
         </div>
 
-        <!-- Auto Mode Display -->
-        <div class="auto-display" id="auto-display">
-            <h3>🤖 Autonomous Navigation Active</h3>
-            <div class="sensor-display">
-                <div class="sensor-card">
-                    <h4>Left Sensor</h4>
-                    <div class="sensor-value" id="sensor-left">--</div>
-                    <small>cm</small>
-                </div>
-                <div class="sensor-card">
-                    <h4>Center Sensor</h4>
-                    <div class="sensor-value" id="sensor-center">--</div>
-                    <small>cm</small>
-                </div>
-                <div class="sensor-card">
-                    <h4>Right Sensor</h4>
-                    <div class="sensor-value" id="sensor-right">--</div>
-                    <small>cm</small>
-                </div>
-            </div>
-            <div class="tracking-info">
-                <p>Status: <strong id="auto-status">Navigating...</strong></p>
-            </div>
-        </div>
-
         <!-- Follow Mode Display -->
         <div class="follow-display" id="follow-display">
             <h3>👁️ Object Following Active</h3>
@@ -541,8 +474,8 @@
             // Monitor video stream
             monitorVideoStream();
             
-            // Start sensor data updates
-            setInterval(updateSensorData, 1000);
+            // Start tracking data updates for follow mode
+            setInterval(updateTrackingData, 1000);
         });
 
         function monitorVideoStream() {
@@ -687,7 +620,6 @@
             // Hide all mode-specific controls
             document.getElementById('manual-controls').style.display = 'none';
             document.getElementById('gyro-controls').classList.remove('active');
-            document.getElementById('auto-display').classList.remove('active');
             document.getElementById('follow-display').classList.remove('active');
             
             // Show relevant controls
@@ -697,9 +629,6 @@
                     break;
                 case 'gyro':
                     document.getElementById('gyro-controls').classList.add('active');
-                    break;
-                case 'auto':
-                    document.getElementById('auto-display').classList.add('active');
                     break;
                 case 'follow':
                     document.getElementById('follow-display').classList.add('active');
@@ -789,20 +718,8 @@
             });
         }
 
-        async function updateSensorData() {
-            if (currentMode === 'auto') {
-                try {
-                    const response = await fetch('/sensor_data');
-                    const data = await response.json();
-                    
-                    document.getElementById('sensor-left').textContent = data.left.toFixed(1);
-                    document.getElementById('sensor-center').textContent = data.center.toFixed(1);
-                    document.getElementById('sensor-right').textContent = data.right.toFixed(1);
-                    document.getElementById('auto-status').textContent = data.status;
-                } catch (error) {
-                    console.error('Error fetching sensor data:', error);
-                }
-            } else if (currentMode === 'follow') {
+        async function updateTrackingData() {
+            if (currentMode === 'follow') {
                 try {
                     const response = await fetch('/tracking_data');
                     const data = await response.json();
