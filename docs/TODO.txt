@@ -1,9 +1,12 @@
 ---------hardware------------
-ultrasonic's echo pins
+1. battery holder with button and convert to 5V
+2. 
 
 ---------software------------
-not well detecting kirby
-PID
-server to be tested
+1. cam resolution
+2. server and yolo mismatch error's datatype
 
- 
+---ASAP---
+1.
+
+
