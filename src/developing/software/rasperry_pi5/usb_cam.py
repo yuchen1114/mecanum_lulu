@@ -5,7 +5,7 @@
 Fixed Camera Publisher Node for ROS 2
 Captures webcam feed with better error handling
 """
-
+#caution:camera resolution aligned with YOLO 
 import rclpy
 import cv2
 import cv_bridge
@@ -19,9 +19,9 @@ class CameraPublisher(Node):
         super().__init__('camera_publisher')
         
         # Parameters with defaults
-        self.declare_parameter('camera_index', 1)
-        self.declare_parameter('frame_width', 640)
-        self.declare_parameter('frame_height', 480)
+        self.declare_parameter('camera_index', 0)
+        self.declare_parameter('frame_width', 1920)  
+        self.declare_parameter('frame_height', 1080) 
         self.declare_parameter('fps', 30)
         self.declare_parameter('use_v4l2', True)
         
