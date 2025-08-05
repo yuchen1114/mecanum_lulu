@@ -1,19 +1,2 @@
----------hardware------------
-1. battery holder with button and convert to 5V
+1. better yolo model
 2. 
-
----------software------------
-1. cam resolution
-2. server and yolo mismatch error's datatype
-
----ASAP---
-1.
-
-
-
-
---update--
-yolo
-server
-
-

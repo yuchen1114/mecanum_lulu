@@ -2,6 +2,7 @@
 """
 ROS2 Robot Controller Server
 Supports manual, follow, and gyro modes with video streaming
+Fixed QoS compatibility with camera publisher
 """
 
 import socket
@@ -15,6 +16,7 @@ import numpy as np
 
 import rclpy
 from rclpy.node import Node
+from rclpy.qos import QoSProfile, QoSReliabilityPolicy, QoSHistoryPolicy
 from std_msgs.msg import String, Float64
 from geometry_msgs.msg import Twist
 from sensor_msgs.msg import Image, CompressedImage
@@ -44,10 +46,17 @@ class RobotControllerNode(Node):
         self.mode_publisher = self.create_publisher(String, '/robot_mode', 10)
         self.status_publisher = self.create_publisher(String, '/robot_status', 10)
         
-        # Create subscribers
-        # Subscribe to raw image - we'll compress it ourselves for better control
+        # Setup QoS profile to match camera publisher
+        image_qos_profile = QoSProfile(
+            reliability=QoSReliabilityPolicy.BEST_EFFORT,
+            history=QoSHistoryPolicy.KEEP_LAST,
+            depth=1
+        )
+        
+        # Create subscribers with matching QoS
+        # Subscribe to raw image with compatible QoS settings
         self.image_subscriber = self.create_subscription(
-            Image, '/image_raw', self.image_callback, 10
+            Image, '/image_raw', self.image_callback, image_qos_profile
         )
         
         # Subscribe to tracking data for follow mode - now expecting Float64
@@ -84,6 +93,7 @@ class RobotControllerNode(Node):
         self.get_logger().info('ROS2 Robot Controller initialized')
         self.get_logger().info('Modes: manual, follow, gyro')
         self.get_logger().info('Video streaming enabled on port 8889')
+        self.get_logger().info('Image subscriber QoS: BEST_EFFORT reliability')
     
     def image_callback(self, msg):
         """Handle incoming camera images"""
@@ -93,6 +103,17 @@ class RobotControllerNode(Node):
             
             with self.image_lock:
                 self.latest_image = cv_image
+                
+            # Log successful image reception (every 150 frames = ~5 seconds at 30fps)
+            if hasattr(self, '_image_count'):
+                self._image_count += 1
+            else:
+                self._image_count = 1
+                
+            if self._image_count % 150 == 0:
+                height, width = cv_image.shape[:2]
+                self.get_logger().info(f'Receiving images: {width}x{height}, count: {self._image_count}')
+                
         except Exception as e:
             self.get_logger().error(f'Error processing image: {e}')
     
@@ -302,7 +323,8 @@ class RobotControllerNode(Node):
             'uptime': round(uptime, 1),
             'linear_speed': self.current_twist.linear.x,
             'angular_speed': self.current_twist.angular.z,
-            'timestamp': datetime.now().isoformat()
+            'timestamp': datetime.now().isoformat(),
+            'image_count': getattr(self, '_image_count', 0)
         }
         
         # Add mode-specific data
@@ -558,6 +580,7 @@ def main(args=None):
     print("🤖 ROS2 Robot Controller Starting...")
     print("📹 Video streaming enabled (640x480)")
     print("🎮 Modes: manual, follow, gyro")
+    print("🔧 QoS: BEST_EFFORT reliability for image subscription")
     print("=" * 50)
     
     rclpy.init(args=args)
