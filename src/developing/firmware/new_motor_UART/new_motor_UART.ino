@@ -1,8 +1,8 @@
 #include <Arduino.h>
 #include "esp32-hal-ledc.h"
-// PID logic wrong!
+//to be tested
 /*  
-Motor controller with ultrasonic sensor for crash prevention
+Motor controller with ultrasonic sensor for crash prevention - IMPROVED VERSION
 UART2 on GPIO16(RX), GPIO17(TX) @ 115200 baud
 Ultrasonic sensor on GPIO26(TRIG), GPIO27(ECHO)
 
@@ -15,10 +15,11 @@ Legacy commands for PID testing:
 "s1:100\n"   // Set motor 1 speed
 "kp1.2\n"    // Adjust PID parameters
 
-Updated ultrasonic logic:
+Improved ultrasonic logic:
 - Emergency stop when object detected within 20cm
 - After 2 seconds in emergency stop, motors become active again
-- Emergency stop flag resets when object moves out of 20cm range
+- Emergency stop flag resets when object moves out of 25cm range (hysteresis)
+- Improved PID stability during transitions
 */
 
 // --- Pin definitions for three L298N modules ---
@@ -53,8 +54,10 @@ Updated ultrasonic logic:
 
 // --- Safety settings ---
 const float STOP_DISTANCE_CM = 20.0;  // Stop if object is closer than 20cm
+const float CLEAR_DISTANCE_CM = 25.0; // Clear emergency stop when object is farther than 25cm (hysteresis)
 const unsigned long ULTRASONIC_PERIOD = 50;  // Check distance every 50ms
 const unsigned long EMERGENCY_STOP_DURATION = 2000;  // 2 seconds
+const unsigned long RAMP_UP_DURATION = 500;  // 500ms gradual ramp-up after reactivation
 
 // --- Encoder variables ---
 volatile long encoderCount[3] = {0, 0, 0};
@@ -66,6 +69,7 @@ float Kp = 0.65;
 float Ki = 1.0;
 float Kd = 0.0;
 float targetSpeed_mmps[3] = {0, 0, 0};
+float actualTargetSpeed_mmps[3] = {0, 0, 0};  // What we're actually commanding (for ramp-up)
 float integral[3] = {0, 0, 0};
 float previousError[3] = {0, 0, 0};
 
@@ -76,6 +80,7 @@ const int PWM_MAX = 204;
 unsigned long lastTime = 0;
 unsigned long lastUltrasonicTime = 0;
 unsigned long emergencyStopStartTime = 0;
+unsigned long reactivationStartTime = 0;
 
 // --- Mechanical parameters ---
 const float wheel_circumference_mm = 219.91;
@@ -85,6 +90,12 @@ const float mm_per_tick = wheel_circumference_mm / ticks_per_rev;
 // --- Safety flags ---
 bool emergencyStop = false;
 bool objectDetected = false;
+bool isRampingUp = false;
+bool wasInEmergencyStop = false;
+
+// --- Distance filtering for stability ---
+float lastDistance = 999.0;
+const float DISTANCE_FILTER_ALPHA = 0.3;  // Low-pass filter coefficient
 
 // --- Interrupt service routines ---
 void IRAM_ATTR onEncoder1() {
@@ -125,6 +136,11 @@ float getUltrasonicDistance() {
   }
   
   float distance = duration * 0.034 / 2.0;
+  
+  // Apply low-pass filter to reduce noise
+  distance = DISTANCE_FILTER_ALPHA * distance + (1.0 - DISTANCE_FILTER_ALPHA) * lastDistance;
+  lastDistance = distance;
+  
   return distance;
 }
 
@@ -132,10 +148,10 @@ void setup() {
   Serial.begin(115200);  // Debug serial
   Serial2.begin(115200, SERIAL_8N1, 16, 17);  // UART2 for receiving commands
   
-  Serial.println("Motor controller with ultrasonic sensor ready");
+  Serial.println("Improved Motor controller with ultrasonic sensor ready");
   Serial.println("UART2 on GPIO16(RX), GPIO17(TX)");
   Serial.println("Ultrasonic on GPIO26(TRIG), GPIO27(ECHO)");
-  Serial.println("Updated logic: 2s emergency stop, then reactivate");
+  Serial.println("Improved logic: 2s emergency stop, hysteresis, gradual ramp-up");
 
   // --- Ultrasonic sensor initialization ---
   pinMode(TRIG_PIN, OUTPUT);
@@ -173,9 +189,22 @@ void setup() {
 void stopAllMotors() {
   for (int i = 0; i < 3; i++) {
     controlMotor(i, 0);
-    // Don't reset target speeds - keep them for when we resume
-    integral[i] = 0;  // Reset integral to prevent windup
+    // Reset PID terms to prevent windup and ensure clean restart
+    integral[i] = 0;
+    previousError[i] = 0;
+    actualTargetSpeed_mmps[i] = 0;
   }
+}
+
+void resetPIDForReactivation() {
+  // Clean PID state for smooth reactivation
+  for (int i = 0; i < 3; i++) {
+    integral[i] = 0;
+    previousError[i] = 0;
+    actualTargetSpeed_mmps[i] = 0;  // Start ramp from zero
+  }
+  isRampingUp = true;
+  reactivationStartTime = millis();
 }
 
 void controlMotor(int motorIndex, float output) {
@@ -258,6 +287,29 @@ void processCommand(String cmd) {
   }
 }
 
+void updateRampUp() {
+  if (!isRampingUp) return;
+  
+  unsigned long now = millis();
+  unsigned long elapsed = now - reactivationStartTime;
+  
+  if (elapsed >= RAMP_UP_DURATION) {
+    // Ramp-up complete
+    isRampingUp = false;
+    for (int i = 0; i < 3; i++) {
+      actualTargetSpeed_mmps[i] = targetSpeed_mmps[i];
+    }
+  } else {
+    // Gradual ramp-up
+    float rampProgress = (float)elapsed / RAMP_UP_DURATION;
+    rampProgress = min(rampProgress, 1.0);  // Clamp to 1.0
+    
+    for (int i = 0; i < 3; i++) {
+      actualTargetSpeed_mmps[i] = targetSpeed_mmps[i] * rampProgress;
+    }
+  }
+}
+
 void loop() {
   // Process UART2 commands
   if (Serial2.available()) {
@@ -276,8 +328,13 @@ void loop() {
   if (now - lastUltrasonicTime >= ULTRASONIC_PERIOD) {
     float distance = getUltrasonicDistance();
     
-    // Update object detection status
-    objectDetected = (distance < STOP_DISTANCE_CM);
+    // Update object detection status with hysteresis
+    if (distance < STOP_DISTANCE_CM) {
+      objectDetected = true;
+    } else if (distance > CLEAR_DISTANCE_CM) {
+      objectDetected = false;
+    }
+    // If distance is between STOP_DISTANCE_CM and CLEAR_DISTANCE_CM, maintain current state
     
     // Handle emergency stop logic
     if (objectDetected) {
@@ -285,6 +342,7 @@ void loop() {
         // First time detecting object - start emergency stop
         emergencyStop = true;
         emergencyStopStartTime = now;
+        wasInEmergencyStop = true;
         stopAllMotors();
         Serial.print("EMERGENCY STOP! Distance: ");
         Serial.print(distance);
@@ -294,23 +352,27 @@ void loop() {
         // Already in emergency stop - check if 2 seconds have passed
         if (now - emergencyStopStartTime >= EMERGENCY_STOP_DURATION) {
           emergencyStop = false;
-          Serial.println("Emergency stop timeout - motors reactivated");
+          resetPIDForReactivation();
+          Serial.println("Emergency stop timeout - motors reactivating with ramp-up");
           Serial2.println("ESTOP:TIMEOUT_REACTIVATED");
-          // Motors will resume with existing target speeds in PID loop
         }
       }
     } else {
-      // Object not detected (distance >= 20cm)
+      // Object not detected (distance >= CLEAR_DISTANCE_CM)
       if (emergencyStop) {
         // Clear emergency stop when object moves away
         emergencyStop = false;
-        Serial.println("Object cleared - emergency stop reset");
+        resetPIDForReactivation();
+        Serial.println("Object cleared - emergency stop reset with ramp-up");
         Serial2.println("ESTOP:CLEARED");
       }
     }
     
     lastUltrasonicTime = now;
   }
+  
+  // Update ramp-up if active
+  updateRampUp();
   
   // PID control loop (every 100ms)
   if (now - lastTime >= 100) {
@@ -330,9 +392,14 @@ void loop() {
 
       // Only run PID if not in emergency stop
       if (!emergencyStop) {
-        // PID control
-        float error = targetSpeed_mmps[i] - currentSpeed[i];
+        // Use actualTargetSpeed (ramped) instead of direct targetSpeed
+        float error = actualTargetSpeed_mmps[i] - currentSpeed[i];
         integral[i] += error * 0.1;
+        
+        // Prevent integral windup
+        float maxIntegral = PWM_MAX / Ki;
+        integral[i] = constrain(integral[i], -maxIntegral, maxIntegral);
+        
         float derivative = (error - previousError[i]) / 0.1;
         float output = Kp * error + Ki * integral[i] - Kd * derivative;
         previousError[i] = error;
@@ -347,16 +414,25 @@ void loop() {
 
     // Display status
     Serial.print("Target1:"); Serial.print(targetSpeed_mmps[0]);
+    Serial.print(",Actual1:"); Serial.print(actualTargetSpeed_mmps[0]);
     Serial.print(",Speed1:"); Serial.print(currentSpeed[0]);
     Serial.print(",Target2:"); Serial.print(targetSpeed_mmps[1]);
+    Serial.print(",Actual2:"); Serial.print(actualTargetSpeed_mmps[1]);
     Serial.print(",Speed2:"); Serial.print(currentSpeed[1]);
     Serial.print(",Target3:"); Serial.print(targetSpeed_mmps[2]);
+    Serial.print(",Actual3:"); Serial.print(actualTargetSpeed_mmps[2]);
     Serial.print(",Speed3:"); Serial.print(currentSpeed[2]);
+    
     if (emergencyStop) {
       unsigned long stopDuration = now - emergencyStopStartTime;
       Serial.print(" [EMERGENCY STOP - ");
       Serial.print(stopDuration / 1000.0, 1);
       Serial.print("s]");
+    } else if (isRampingUp) {
+      unsigned long rampDuration = now - reactivationStartTime;
+      Serial.print(" [RAMPING UP - ");
+      Serial.print(rampDuration);
+      Serial.print("ms]");
     }
     Serial.println();
 
