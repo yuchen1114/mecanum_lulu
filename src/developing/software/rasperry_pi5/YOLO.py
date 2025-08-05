@@ -14,13 +14,13 @@ from ultralytics import YOLO
 from rclpy.qos import QoSProfile, QoSReliabilityPolicy, QoSHistoryPolicy
 from rclpy.node import Node
 from sensor_msgs.msg import Image
-from custom_msg.msg import Sensordata #float64
+from std_msgs.msg import Float64
 
 # Configuration
-TARGET_Y = 960
+TARGET_Y = 320
 MODEL_PATH = "/home/lulu/mecanum_lulu/log/YOLO_model/best0723.pt"
 # MODEL_PATH = "/home/mecanum_lulu/log/YOLO_model/best0723.pt"
-CONFIDENCE_THRESHOLD = 0.80
+CONFIDENCE_THRESHOLD = 0.30
 
 class ObjectTracker:
     def __init__(self):
@@ -31,6 +31,7 @@ class ObjectTracker:
         """Process YOLO detection results and return object center"""
         cx = TARGET_Y
         cy = 0
+        object_detected = False
         
         # Get original frame
         frame = results[0].orig_img.copy()
@@ -53,6 +54,7 @@ class ObjectTracker:
             x1, y1, x2, y2 = map(int, box.xyxy[0].tolist())
             cx = (x1 + x2) // 2
             cy = (y1 + y2) // 2
+            object_detected = True
             
             # Get class info
             class_id = int(box.cls[0])
@@ -62,12 +64,15 @@ class ObjectTracker:
             cv2.rectangle(frame, (x1, y1), (x2, y2), (255, 0, 0), 2)
             cv2.putText(frame, label, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 0), 2)
             cv2.circle(frame, (cx, cy), 5, (0, 255, 0), -1)
+            
+            # Only track the first valid detection
+            break
         
         # Display frame
         cv2.imshow("Object Tracker", frame)
         cv2.waitKey(1)
         
-        return cx + width // 2
+        return cx, object_detected
 
 class TrackerNode(Node):
     def __init__(self):
@@ -83,11 +88,8 @@ class TrackerNode(Node):
             depth=1
         )
         
-        # Setup QoS for sensor data publisher
-        sensor_qos = QoSProfile(depth=10)
-        
-        # Create publisher and subscriber
-        self.publisher = self.create_publisher(Sensordata, 'tracker_data', sensor_qos)
+        # Create publisher and subscriber - using Float64 for simple error value
+        self.publisher = self.create_publisher(Float64, '/tracker_data', 10)
         self.subscription = self.create_subscription(
             Image, '/image_raw', self.image_callback, image_qos)
     
@@ -102,19 +104,26 @@ class TrackerNode(Node):
             
             # Calculate tracking error
             height, width = image.shape[:2]
-            center_offset = self.tracker.process_frame(results)
-            error = width // 2 - center_offset + TARGET_Y
+            center_x, object_detected = self.tracker.process_frame(results)
             
-            # Apply boundary limits
-            if error < (-width // 2 + 25):
-                error = 0
+            # Calculate error from center
+            if object_detected:
+                error = center_x - (width // 2)
+                
+                # Apply boundary limits
+                if error < (-width // 2 + 25):
+                    error = 0.0
+            else:
+                # No object detected - send 0 to indicate no tracking
+                error = 0.0
             
-            # Publish tracking data
-            sensor_msg = Sensordata()
-            sensor_msg.data = float(error)
-            self.publisher.publish(sensor_msg)
+            # Publish tracking error as Float64
+            error_msg = Float64()
+            error_msg.data = float(error)
+            self.publisher.publish(error_msg)
             
-            self.get_logger().info(f'Tracking error: {error}')
+            status = "DETECTED" if object_detected else "NO_OBJECT"
+            self.get_logger().info(f'Tracking - Error: {error:.2f}, Status: {status}')
             
         except Exception as e:
             self.get_logger().error(f'Error processing image: {str(e)}')
