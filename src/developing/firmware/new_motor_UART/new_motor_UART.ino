@@ -1,6 +1,6 @@
 #include <Arduino.h>
 #include "esp32-hal-ledc.h"
-
+// PID logic wrong!
 /*  
 Motor controller with ultrasonic sensor for crash prevention
 UART2 on GPIO16(RX), GPIO17(TX) @ 115200 baud
