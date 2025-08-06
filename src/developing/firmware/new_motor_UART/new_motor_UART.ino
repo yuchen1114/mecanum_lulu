@@ -1,6 +1,6 @@
 #include <Arduino.h>
 #include "esp32-hal-ledc.h"
-//to be tested
+
 /*  
 Motor controller with ultrasonic sensor for crash prevention - IMPROVED VERSION
 UART2 on GPIO16(RX), GPIO17(TX) @ 115200 baud
@@ -244,6 +244,8 @@ void controlMotor(int motorIndex, float output) {
 void processCommand(String cmd) {
   cmd.trim();
   
+  bool newTargetSet = false;
+  
   // Check if it's direct velocity format: "vel1,vel2,vel3"
   if (cmd.indexOf(',') > 0 && cmd.indexOf(':') == -1) {
     // Parse three velocities
@@ -254,6 +256,7 @@ void processCommand(String cmd) {
       targetSpeed_mmps[0] = cmd.substring(0, firstComma).toFloat();
       targetSpeed_mmps[1] = cmd.substring(firstComma + 1, secondComma).toFloat();
       targetSpeed_mmps[2] = cmd.substring(secondComma + 1).toFloat();
+      newTargetSet = true;
       
       Serial.print("Set velocities: ");
       Serial.print(targetSpeed_mmps[0]); Serial.print(",");
@@ -268,12 +271,14 @@ void processCommand(String cmd) {
       float speed = cmd.substring(cmd.indexOf(":") + 1).toFloat();
       if (motorNum >= 1 && motorNum <= 3) {
         targetSpeed_mmps[motorNum - 1] = speed;
+        newTargetSet = true;
       }
     } else {
       float speed = cmd.substring(1).toFloat();
       for (int i = 0; i < 3; i++) {
         targetSpeed_mmps[i] = speed;
       }
+      newTargetSet = true;
     }
   } else if (cmd.startsWith("kp")) {
     Kp = cmd.substring(2).toFloat();
@@ -284,6 +289,20 @@ void processCommand(String cmd) {
   } else if (cmd.startsWith("kd")) {
     Kd = cmd.substring(2).toFloat();
     Serial.print("Kd = "); Serial.println(Kd);
+  }
+  
+  // If new target speeds were set and we're not in emergency stop, update immediately
+  if (newTargetSet && !emergencyStop) {
+    // If we're currently ramping up from emergency stop, don't interrupt that
+    if (!isRampingUp) {
+      // Set actual targets directly to new targets for immediate response
+      for (int i = 0; i < 3; i++) {
+        actualTargetSpeed_mmps[i] = targetSpeed_mmps[i];
+      }
+      Serial.println("Targets updated immediately");
+    } else {
+      Serial.println("New targets set - will take effect after current ramp-up");
+    }
   }
 }
 
@@ -302,7 +321,7 @@ void updateRampUp() {
   } else {
     // Gradual ramp-up
     float rampProgress = (float)elapsed / RAMP_UP_DURATION;
-    rampProgress = min(rampProgress, 1.0);  // Clamp to 1.0
+    rampProgress = min(rampProgress, 1.0f);  // Clamp to 1.0
     
     for (int i = 0; i < 3; i++) {
       actualTargetSpeed_mmps[i] = targetSpeed_mmps[i] * rampProgress;
