@@ -1,3 +1,2 @@
 1. better yolo model
-2. test motor_UART
-3. new web controller
+2. web controller-> when no tracking data move forward at slow pace
