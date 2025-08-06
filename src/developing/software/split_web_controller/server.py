@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
 """
-ROS2 Robot Controller Server
+ROS2 Robot Controller Server - Complete Version with Fixed Follow Mode
 Supports manual, follow, and gyro modes with video streaming
-Fixed QoS compatibility with camera publisher
 """
 
 import socket
@@ -54,12 +53,11 @@ class RobotControllerNode(Node):
         )
         
         # Create subscribers with matching QoS
-        # Subscribe to raw image with compatible QoS settings
         self.image_subscriber = self.create_subscription(
             Image, '/image_raw', self.image_callback, image_qos_profile
         )
         
-        # Subscribe to tracking data for follow mode - now expecting Float64
+        # Subscribe to tracking data for follow mode - expecting Float64
         self.tracker_subscriber = self.create_subscription(
             Float64, '/tracker_data', self.tracker_callback, 10
         )
@@ -90,10 +88,15 @@ class RobotControllerNode(Node):
         self.gyro_pitch = 0
         self.gyro_roll = 0
         
+        # Follow mode parameters
+        self.follow_kp = 0.003  # Proportional gain for turning
+        self.follow_error_threshold = 30  # pixels - dead zone for centering
+        self.follow_max_error = 320  # half of 640 width
+        
         self.get_logger().info('ROS2 Robot Controller initialized')
         self.get_logger().info('Modes: manual, follow, gyro')
         self.get_logger().info('Video streaming enabled on port 8889')
-        self.get_logger().info('Image subscriber QoS: BEST_EFFORT reliability')
+        self.get_logger().info('Follow mode configured with YOLO tracker')
     
     def image_callback(self, msg):
         """Handle incoming camera images"""
@@ -118,22 +121,28 @@ class RobotControllerNode(Node):
             self.get_logger().error(f'Error processing image: {e}')
     
     def tracker_callback(self, msg):
-        """Handle object tracking data - now receives Float64"""
+        """Handle object tracking data - receives Float64 error value"""
         try:
             # Get error value from Float64 message
             self.tracker_error = msg.data
             self.last_tracker_time = time.time()
             
-            # Consider tracking valid if error is not exactly 0 (indicating no detection)
-            # You may want to adjust this logic based on your specific needs
-            self.tracker_valid = abs(self.tracker_error) > 0.1
+            # Consider tracking valid if error is not exactly 0 (0 means no detection in YOLO.py)
+            self.tracker_valid = (self.tracker_error != 0.0)
+            
+            # Log tracking data periodically
+            if hasattr(self, '_tracker_count'):
+                self._tracker_count += 1
+            else:
+                self._tracker_count = 1
+            
+            if self._tracker_count % 10 == 0:  # Log every 10th message
+                self.get_logger().info(f'Tracker - Error: {self.tracker_error:.2f}, Valid: {self.tracker_valid}')
             
             # Run follow mode logic if active
             if self.current_mode == 'follow':
                 self.follow_object()
                 
-            self.get_logger().info(f'Tracker data - Error: {self.tracker_error:.2f}, Valid: {self.tracker_valid}')
-            
         except Exception as e:
             self.get_logger().error(f'Error processing tracker data: {e}')
     
@@ -145,20 +154,21 @@ class RobotControllerNode(Node):
         if self.current_mode == 'follow':
             if current_time - self.last_tracker_time > self.tracker_timeout:
                 self.tracker_valid = False
-                self.follow_object()  # This will handle the timeout case
+                self.follow_state = 'searching'
+                # Stop the robot if we lose tracking
+                if self.is_moving:
+                    self.stop_robot()
         
         # Check for command timeout in manual/gyro mode
         if self.current_mode in ['manual', 'gyro'] and self.is_moving:
             if current_time - self.last_move_command_time > COMMAND_TIMEOUT:
-                # Only log timeout stops, not regular stops
                 self.get_logger().info('Movement timeout - stopping robot')
                 self.stop_robot()
         
         # Always publish current twist
         self.cmd_vel_publisher.publish(self.current_twist)
         
-        # Publish status less frequently to reduce overhead
-        # Changed from every second to every 2 seconds
+        # Publish status less frequently
         if int(current_time / 2) != int((current_time - 0.1) / 2):
             self.publish_status()
     
@@ -264,9 +274,6 @@ class RobotControllerNode(Node):
     
     def stop_robot(self):
         """Stop all robot movement"""
-        # Check if we're actually moving before logging stop
-        was_moving = self.is_moving
-        
         self.is_moving = False
         self.current_twist.linear.x = 0.0
         self.current_twist.linear.y = 0.0
@@ -274,18 +281,11 @@ class RobotControllerNode(Node):
         
         # Publish stop command immediately
         self.cmd_vel_publisher.publish(self.current_twist)
-        
-        # Only log if we were actually moving and this is a timeout stop
-        # Don't log for explicit stop commands or mode changes
-        if was_moving and self.last_command and not self.last_command.endswith(":stop"):
-            # Check if this is a timeout stop (no recent move commands)
-            current_time = time.time()
-            if current_time - self.last_move_command_time > COMMAND_TIMEOUT:
-                self.get_logger().info('Robot stopped (timeout)')
     
     def start_follow_mode(self):
         """Initialize follow mode"""
         self.get_logger().info('Starting object following mode')
+        self.get_logger().info(f'Follow parameters: Kp={self.follow_kp}, threshold={self.follow_error_threshold}px')
         self.follow_state = 'searching'
         self.tracker_valid = False
     
@@ -296,35 +296,59 @@ class RobotControllerNode(Node):
         self.gyro_roll = 0
     
     def follow_object(self):
-        """Follow tracked object"""
+        """Follow tracked object based on error from YOLO tracker"""
         if self.current_mode != 'follow':
             return
         
         if not self.tracker_valid:
-            # No valid tracking - stop or search
+            # No valid tracking - stop
             self.current_twist.linear.x = 0.0
             self.current_twist.angular.z = 0.0
             self.follow_state = 'searching'
             self.is_moving = False
             return
         
-        # Proportional control based on error from center
-        error_threshold = 50  # pixels (adjusted for 640x480)
-        max_error = 320  # half of 640 width
+        # We have valid tracking data
+        error = self.tracker_error  # Error in pixels from center
         
-        if abs(self.tracker_error) < error_threshold:
+        # Calculate turning speed using proportional control
+        # Negative error means object is to the left, positive means to the right
+        turn_speed = -self.follow_kp * error  # Negative because we want to turn toward the object
+        
+        # Limit turn speed
+        max_turn_speed = self.angular_speed * 0.7  # Use 70% of max angular speed
+        turn_speed = max(-max_turn_speed, min(max_turn_speed, turn_speed))
+        
+        # Determine forward speed based on centering error
+        if abs(error) < self.follow_error_threshold:
             # Object centered - move forward
             self.current_twist.linear.x = self.linear_speed
-            self.current_twist.angular.z = 0.0
+            self.current_twist.angular.z = turn_speed * 0.2  # Small correction while moving
             self.follow_state = 'following'
-        else:
-            # Turn to center object
-            turn_speed = (self.tracker_error / max_error) * self.angular_speed
-            self.current_twist.linear.x = self.linear_speed * 0.3
-            self.current_twist.angular.z = -turn_speed  # Negative because error is positive when object is to the right
+        elif abs(error) < self.follow_error_threshold * 3:
+            # Object somewhat centered - move slowly while turning
+            self.current_twist.linear.x = self.linear_speed * 0.5
+            self.current_twist.angular.z = turn_speed
             self.follow_state = 'centering'
+        else:
+            # Object far from center - just turn
+            self.current_twist.linear.x = 0.0
+            self.current_twist.angular.z = turn_speed
+            self.follow_state = 'turning'
         
         self.is_moving = True
+        
+        # Log follow state periodically
+        if hasattr(self, '_follow_log_count'):
+            self._follow_log_count += 1
+        else:
+            self._follow_log_count = 1
+        
+        if self._follow_log_count % 20 == 0:  # Log every 20th call
+            self.get_logger().info(
+                f'Follow mode - State: {self.follow_state}, Error: {error:.1f}px, '
+                f'Linear: {self.current_twist.linear.x:.2f}, Angular: {self.current_twist.angular.z:.2f}'
+            )
     
     def get_status(self):
         """Get current robot status"""
@@ -364,8 +388,6 @@ class RobotControllerNode(Node):
                 self.last_command = command_str
                 self.get_logger().info(f'Command #{self.command_count}: {command_str}')
             else:
-                # For movement commands, only update last_command without logging
-                # This preserves the behavior for stop detection
                 self.last_command = command_str
             
             if ':' in command_str:
@@ -379,7 +401,7 @@ class RobotControllerNode(Node):
                     return self.handle_gyro_command(command_value)
                 elif command_type == 'GET_TRACKING':
                     track_str = f"status={self.follow_state},"
-                    track_str += f"error={self.tracker_error},"
+                    track_str += f"error={int(self.tracker_error)},"
                     track_str += f"action={'following' if self.tracker_valid else 'searching'}"
                     return f"TRACKING_DATA:{track_str}"
                 else:
@@ -603,7 +625,7 @@ def main(args=None):
     print("🤖 ROS2 Robot Controller Starting...")
     print("📹 Video streaming enabled (640x480)")
     print("🎮 Modes: manual, follow, gyro")
-    print("🔧 QoS: BEST_EFFORT reliability for image subscription")
+    print("🎯 Follow mode using YOLO tracker on /tracker_data")
     print("=" * 50)
     
     rclpy.init(args=args)
@@ -616,7 +638,7 @@ def main(args=None):
         server = RobotServer(robot_node)
         video_server = VideoStreamServer(robot_node, VIDEO_PORT)
         
-        # Start servers
+        # Start servers in separate threads
         server_thread = threading.Thread(target=server.start, daemon=True)
         server_thread.start()
         
@@ -624,7 +646,7 @@ def main(args=None):
         
         robot_node.get_logger().info('All systems ready!')
         
-        # Spin the node
+        # Spin the node - THIS IS THE IMPORTANT PART THAT WAS MISSING
         rclpy.spin(robot_node)
         
     except KeyboardInterrupt:
