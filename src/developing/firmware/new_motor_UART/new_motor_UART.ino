@@ -1,6 +1,6 @@
 #include <Arduino.h>
 #include "esp32-hal-ledc.h"
-
+//kd 0.04  kp0.65 ki0.06
 /*  
 Motor controller with ultrasonic sensor for crash prevention - IMPROVED VERSION
 UART2 on GPIO16(RX), GPIO17(TX) @ 115200 baud
@@ -65,9 +65,9 @@ long lastEncoderCount[3] = {0, 0, 0};
 float currentSpeed[3] = {0, 0, 0};
 
 // --- PID parameters ---
-float Kp = 0.65;
-float Ki = 1.0;
-float Kd = 0.0;
+float Kp = 0.65; //0.65;
+float Ki = 0.6; //1.0;
+float Kd = 0.04;
 float targetSpeed_mmps[3] = {0, 0, 0};
 float actualTargetSpeed_mmps[3] = {0, 0, 0};  // What we're actually commanding (for ramp-up)
 float integral[3] = {0, 0, 0};
@@ -420,7 +420,7 @@ void loop() {
         integral[i] = constrain(integral[i], -maxIntegral, maxIntegral);
         
         float derivative = (error - previousError[i]) / 0.1;
-        float output = Kp * error + Ki * integral[i] - Kd * derivative;
+        float output = Kp * error + Ki * integral[i] + Kd * derivative;
         previousError[i] = error;
 
         output = constrain(output, -PWM_MAX, PWM_MAX);
