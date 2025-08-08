@@ -18,9 +18,9 @@ from std_msgs.msg import Float64
 
 # Configuration
 TARGET_Y = 320
-MODEL_PATH = "/home/lulu/mecanum_lulu/log/YOLO_model/best0723.pt"
-# MODEL_PATH = "/home/mecanum_lulu/log/YOLO_model/best0723.pt"
-CONFIDENCE_THRESHOLD = 0.30
+MODEL_PATH = "/home/lulu/mecanum_lulu/log/YOLO_model/lip/best.pt"
+# MODEL_PATH = "/home/mecanum_lulu/log/YOLO_model/lip/best.pt"
+CONFIDENCE_THRESHOLD = 0.70
 
 class ObjectTracker:
     def __init__(self):
