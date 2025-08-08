@@ -298,6 +298,11 @@ CONTROLLER_HTML = '''<!DOCTYPE html>
             transition: all 0.3s ease;
         }
 
+        .update-btn:hover, .reconnect-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
+        }
+
         .message {
             margin-top: 15px;
             padding: 12px;
@@ -317,6 +322,12 @@ CONTROLLER_HTML = '''<!DOCTYPE html>
             border: 1px solid #f5c6cb;
         }
 
+        .message.warning {
+            background: #fff3cd;
+            color: #856404;
+            border: 1px solid #ffeeba;
+        }
+
         .link-section {
             text-align: center;
             margin-top: 20px;
@@ -332,6 +343,12 @@ CONTROLLER_HTML = '''<!DOCTYPE html>
             text-decoration: none;
             border-radius: 8px;
             font-weight: bold;
+            margin: 5px;
+        }
+
+        .link-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(30, 60, 114, 0.4);
         }
     </style>
 </head>
@@ -387,6 +404,9 @@ CONTROLLER_HTML = '''<!DOCTYPE html>
                     ⬇️<br>Back
                 </button>
             </div>
+            <p style="text-align: center; margin-top: 20px; color: #666;">
+                Use arrow keys or WASD for keyboard control
+            </p>
         </div>
 
         <!-- Follow Mode Display -->
@@ -434,6 +454,7 @@ CONTROLLER_HTML = '''<!DOCTYPE html>
 
     <script>
         let currentMode = 'manual';
+        let keyPressed = {};
 
         // Initialize
         document.addEventListener('DOMContentLoaded', function() {
@@ -441,6 +462,7 @@ CONTROLLER_HTML = '''<!DOCTYPE html>
             updateStatus();
             setInterval(updateStatus, 3000);
             setupMovementButtons();
+            setupKeyboardControls();
             setInterval(updateTrackingData, 500);  // Update tracking data faster for smoother distance display
         });
 
@@ -483,7 +505,7 @@ CONTROLLER_HTML = '''<!DOCTYPE html>
                 button.addEventListener('mouseup', stopMoving);
                 button.addEventListener('mouseleave', stopMoving);
                 
-                // Touch events
+                // Touch events for mobile
                 button.addEventListener('touchstart', e => {
                     e.preventDefault();
                     startMoving();
@@ -492,6 +514,85 @@ CONTROLLER_HTML = '''<!DOCTYPE html>
                     e.preventDefault();
                     stopMoving();
                 });
+                button.addEventListener('touchcancel', e => {
+                    e.preventDefault();
+                    stopMoving();
+                });
+            });
+        }
+
+        function setupKeyboardControls() {
+            // Keyboard controls
+            document.addEventListener('keydown', function(event) {
+                if (currentMode !== 'manual') return;
+                if (keyPressed[event.key]) return; // Prevent key repeat
+                
+                keyPressed[event.key] = true;
+                
+                let direction = null;
+                switch(event.key) {
+                    case 'ArrowUp':
+                    case 'w':
+                    case 'W':
+                        direction = 'forward';
+                        break;
+                    case 'ArrowDown':
+                    case 's':
+                    case 'S':
+                        direction = 'backward';
+                        break;
+                    case 'ArrowLeft':
+                    case 'a':
+                    case 'A':
+                        direction = 'left';
+                        break;
+                    case 'ArrowRight':
+                    case 'd':
+                    case 'D':
+                        direction = 'right';
+                        break;
+                    case ' ':
+                        direction = 'stop';
+                        break;
+                }
+                
+                if (direction) {
+                    event.preventDefault();
+                    if (direction === 'stop') {
+                        sendMoveOnce('stop');
+                    } else {
+                        sendMoveStart(direction);
+                    }
+                }
+            });
+
+            document.addEventListener('keyup', function(event) {
+                keyPressed[event.key] = false;
+                
+                if (currentMode !== 'manual') return;
+                
+                let shouldStop = false;
+                switch(event.key) {
+                    case 'ArrowUp':
+                    case 'w':
+                    case 'W':
+                    case 'ArrowDown':
+                    case 's':
+                    case 'S':
+                    case 'ArrowLeft':
+                    case 'a':
+                    case 'A':
+                    case 'ArrowRight':
+                    case 'd':
+                    case 'D':
+                        shouldStop = true;
+                        break;
+                }
+                
+                if (shouldStop) {
+                    event.preventDefault();
+                    sendMoveStop();
+                }
             });
         }
 
@@ -529,11 +630,11 @@ CONTROLLER_HTML = '''<!DOCTYPE html>
                 const data = await response.json();
                 console.log('Mode switch response:', data);
                 
-                if (data.status === 'success') {
+                if (data.status === 'success' || data.status === 'warning') {
                     currentMode = mode;
                     updateModeUI();
                     updateControlVisibility();
-                    showMessage('Mode switched to ' + mode, 'success');
+                    showMessage('Mode switched to ' + mode, data.status);
                 } else {
                     showMessage('Failed to switch mode: ' + data.message, 'error');
                 }
@@ -575,9 +676,9 @@ CONTROLLER_HTML = '''<!DOCTYPE html>
                     const response = await fetch('/tracking_data');
                     const data = await response.json();
                     
-                    document.getElementById('tracking-status').textContent = data.status;
-                    document.getElementById('tracking-error').textContent = data.error;
-                    document.getElementById('tracking-action').textContent = data.action;
+                    document.getElementById('tracking-status').textContent = data.status || 'Unknown';
+                    document.getElementById('tracking-error').textContent = data.error || 0;
+                    document.getElementById('tracking-action').textContent = data.action || 'Unknown';
                     
                     // Update distance display
                     const distance = data.distance || 999;
@@ -595,6 +696,8 @@ CONTROLLER_HTML = '''<!DOCTYPE html>
 
         function updateDistanceBar(distance) {
             const fill = document.getElementById('distance-fill');
+            if (!fill) return;
+            
             if (distance >= 999) {
                 fill.style.width = '0%';
                 fill.className = 'distance-fill';
@@ -623,12 +726,12 @@ CONTROLLER_HTML = '''<!DOCTYPE html>
                 const response = await fetch('/status');
                 const data = await response.json();
                 
-                currentMode = data.mode;
+                currentMode = data.mode || 'manual';
                 updateModeUI();
                 updateControlVisibility();
                 
-                document.getElementById('current-pi-ip').textContent = data.pi_ip;
-                document.getElementById('pi-ip').value = data.pi_ip;
+                document.getElementById('current-pi-ip').textContent = data.pi_ip || '192.168.16.154';
+                document.getElementById('pi-ip').value = data.pi_ip || '192.168.16.154';
                 
                 const statusDot = document.getElementById('pi-status');
                 const statusText = document.getElementById('pi-status-text');
@@ -642,6 +745,8 @@ CONTROLLER_HTML = '''<!DOCTYPE html>
                 }
             } catch (error) {
                 console.error('Status update error:', error);
+                document.getElementById('pi-status').classList.remove('connected');
+                document.getElementById('pi-status-text').textContent = 'Error';
             }
         }
 
@@ -666,7 +771,7 @@ CONTROLLER_HTML = '''<!DOCTYPE html>
                     showSettingsMessage(data.message, data.status);
                     updateStatus();
                 } else {
-                    showSettingsMessage(data.message, 'error');
+                    showSettingsMessage(data.message || 'Failed to update IP', 'error');
                 }
             } catch (error) {
                 showSettingsMessage('Error updating IP', 'error');
@@ -674,6 +779,8 @@ CONTROLLER_HTML = '''<!DOCTYPE html>
         }
 
         async function reconnectToPi() {
+            showSettingsMessage('Reconnecting...', 'warning');
+            
             try {
                 const response = await fetch('/reconnect', {
                     method: 'POST'
@@ -694,10 +801,13 @@ CONTROLLER_HTML = '''<!DOCTYPE html>
 
         function showMessage(message, type) {
             console.log(`${type}: ${message}`);
+            // You can add a toast notification here if desired
         }
 
         function showSettingsMessage(message, type) {
             const messageEl = document.getElementById('settings-message');
+            if (!messageEl) return;
+            
             messageEl.textContent = message;
             messageEl.className = `message ${type}`;
             messageEl.style.display = 'block';
@@ -706,44 +816,331 @@ CONTROLLER_HTML = '''<!DOCTYPE html>
                 messageEl.style.display = 'none';
             }, 3000);
         }
-
-        // Keyboard controls
-        document.addEventListener('keydown', function(event) {
-            if (currentMode !== 'manual') return;
-            
-            let direction = null;
-            switch(event.key) {
-                case 'ArrowUp':
-                case 'w':
-                case 'W':
-                    direction = 'forward';
-                    break;
-                case 'ArrowDown':
-                case 's':
-                case 'S':
-                    direction = 'backward';
-                    break;
-                case 'ArrowLeft':
-                case 'a':
-                case 'A':
-                    direction = 'left';
-                    break;
-                case 'ArrowRight':
-                case 'd':
-                case 'D':
-                    direction = 'right';
-                    break;
-                case ' ':
-                    direction = 'stop';
-                    break;
-            }
-            
-            if (direction) {
-                event.preventDefault();
-                sendMoveOnce(direction);
-            }
-        });
     </script>
 </body>
 </html>
 '''
+
+def initialize_robot_client():
+    """Initialize the robot client with callbacks"""
+    global robot_client, robot_status
+    
+    try:
+        with client_lock:
+            if robot_client:
+                try:
+                    robot_client.disconnect()
+                except:
+                    pass
+            
+            robot_client = socket_client.RobotSocketClient(pi_ip, pi_port)
+            
+            # Set up callbacks
+            def on_response(command, response, success):
+                print(f"📥 Pi response to '{command}': {response}")
+                
+                # Parse tracking data from responses
+                if "TRACKING_DATA:" in response:
+                    parse_tracking_data(response)
+            
+            def on_connection(connected, message):
+                global robot_status
+                robot_status = "connected" if connected else "disconnected"
+                print(f"🔗 Connection: {message}")
+            
+            robot_client.set_response_callback(on_response)
+            robot_client.set_connection_callback(on_connection)
+            
+            # Try to connect
+            if robot_client.connect():
+                print(f"✅ Connected to Pi at {pi_ip}:{pi_port}")
+                return True
+            else:
+                print(f"❌ Failed to connect to Pi at {pi_ip}:{pi_port}")
+                return False
+    except Exception as e:
+        print(f"❌ Error initializing robot client: {e}")
+        return False
+
+def parse_tracking_data(response):
+    """Parse tracking data from response - now includes distance"""
+    global tracking_data
+    try:
+        # Expected format: TRACKING_DATA:status=XXX,error=XX,distance=XXX,action=XXX
+        data_part = response.split("TRACKING_DATA:")[1]
+        parts = data_part.split(",")
+        
+        with data_lock:
+            for part in parts:
+                if "=" in part:
+                    key, value = part.split("=", 1)
+                    key = key.strip()
+                    value = value.strip()
+                    if key in ['error', 'distance']:
+                        try:
+                            tracking_data[key] = int(value) if '.' not in value else float(value)
+                        except:
+                            tracking_data[key] = 0 if key == 'error' else 999
+                    else:
+                        tracking_data[key] = value
+    except Exception as e:
+        print(f"Error parsing tracking data: {e}")
+
+@app.route('/')
+def index():
+    return render_template_string(CONTROLLER_HTML)
+
+@app.route('/set_mode', methods=['POST'])
+def set_mode():
+    global current_mode, robot_client
+    
+    try:
+        data = request.get_json()
+        mode = data.get('mode', 'manual')
+        
+        print(f"Mode change request: {mode}")
+        
+        valid_modes = ['manual', 'follow']  # Removed 'gyro'
+        if mode not in valid_modes:
+            return jsonify({
+                'status': 'error',
+                'message': 'Invalid mode'
+            }), 400
+        
+        current_mode = mode
+        
+        # Send mode change command to Pi if connected
+        if robot_client and robot_client.is_connected():
+            success = robot_client.send_command(f"MODE:{mode}")
+            print(f"Mode command sent: {success}")
+            
+            return jsonify({
+                'status': 'success' if success else 'error',
+                'mode': current_mode,
+                'message': f'Mode switched to {mode}' if success else 'Failed to send command to Pi',
+                'connected': True
+            })
+        else:
+            # Still change mode locally even if not connected
+            return jsonify({
+                'status': 'warning',
+                'mode': current_mode,
+                'message': f'Mode set to {mode} (Pi not connected)',
+                'connected': False
+            })
+    except Exception as e:
+        print(f"Error in set_mode: {e}")
+        return jsonify({
+            'status': 'error',
+            'message': str(e)
+        }), 500
+
+@app.route('/move', methods=['POST'])
+def move():
+    global current_mode, robot_client
+    data = request.get_json()
+    direction = data.get('direction', '')
+    
+    if current_mode != 'manual':
+        return jsonify({
+            'status': 'error',
+            'message': 'Movement commands only available in manual mode'
+        }), 400
+    
+    valid_directions = ['forward', 'backward', 'left', 'right', 'stop']
+    if direction not in valid_directions:
+        return jsonify({
+            'status': 'error',
+            'message': 'Invalid direction'
+        }), 400
+    
+    # Send movement command to Pi
+    if robot_client and robot_client.is_connected():
+        success = robot_client.send_command(f"MOVE:{direction}")
+        
+        return jsonify({
+            'status': 'success' if success else 'error',
+            'direction': direction,
+            'message': f'Moving {direction}' if success else 'Failed to send command to Pi',
+            'connected': robot_client.is_connected()
+        })
+    else:
+        return jsonify({
+            'status': 'error',
+            'message': 'Not connected to Pi',
+            'connected': False
+        }), 500
+
+@app.route('/move_start', methods=['POST'])
+def move_start():
+    """Start continuous movement (hold-to-move)"""
+    global current_mode, robot_client
+    data = request.get_json()
+    direction = data.get('direction', '')
+    
+    if current_mode != 'manual':
+        return jsonify({
+            'status': 'error',
+            'message': 'Movement commands only available in manual mode'
+        }), 400
+    
+    valid_directions = ['forward', 'backward', 'left', 'right']
+    if direction not in valid_directions:
+        return jsonify({
+            'status': 'error',
+            'message': 'Invalid direction'
+        }), 400
+    
+    # Start continuous movement
+    if robot_client and robot_client.is_connected():
+        robot_client.start_continuous_command(f"MOVE:{direction}", 0.1)
+        
+        return jsonify({
+            'status': 'success',
+            'direction': direction,
+            'message': f'Started continuous movement: {direction}',
+            'connected': robot_client.is_connected()
+        })
+    else:
+        return jsonify({
+            'status': 'error',
+            'message': 'Not connected to Pi',
+            'connected': False
+        }), 500
+
+@app.route('/move_stop', methods=['POST'])
+def move_stop():
+    """Stop continuous movement"""
+    global robot_client
+    
+    if robot_client and robot_client.is_connected():
+        robot_client.stop_continuous_command()
+        # Send explicit stop command
+        robot_client.send_command("MOVE:stop")
+        
+        return jsonify({
+            'status': 'success',
+            'message': 'Stopped continuous movement',
+            'connected': robot_client.is_connected()
+        })
+    else:
+        return jsonify({
+            'status': 'error',
+            'message': 'Not connected to Pi',
+            'connected': False
+        }), 500
+
+@app.route('/tracking_data')
+def get_tracking_data():
+    """Get object tracking data with distance"""
+    # Request fresh tracking data
+    if robot_client and robot_client.is_connected():
+        robot_client.send_command("GET_TRACKING")
+        # Give a tiny bit of time for response
+        time.sleep(0.05)
+    
+    with data_lock:
+        return jsonify(tracking_data)
+
+@app.route('/status')
+def status():
+    global robot_client, current_mode
+    
+    # Request fresh status from Pi
+    if robot_client and robot_client.is_connected():
+        robot_client.send_command("STATUS")
+        # Give a tiny bit of time for response
+        time.sleep(0.05)
+    
+    # Check connection to Pi
+    pi_connected = robot_client.is_connected() if robot_client else False
+    
+    return jsonify({
+        'mode': current_mode,
+        'pi_status': {
+            'connected': pi_connected,
+            'status': 'online' if pi_connected else 'offline',
+            'timestamp': time.time()
+        },
+        'pi_ip': pi_ip,
+        'pi_port': pi_port
+    })
+
+@app.route('/set_pi_ip', methods=['POST'])
+def set_pi_ip():
+    global pi_ip, robot_client
+    data = request.get_json()
+    new_ip = data.get('ip', '')
+    
+    if new_ip:
+        pi_ip = new_ip
+        print(f"Updating Pi IP to: {pi_ip}")
+        
+        # Reconnect with new IP
+        success = initialize_robot_client()
+        
+        return jsonify({
+            'status': 'success' if success else 'warning',
+            'message': f'Pi IP updated to {pi_ip}' + (' and connected' if success else ' but connection failed'),
+            'connected': success
+        })
+    else:
+        return jsonify({
+            'status': 'error',
+            'message': 'Invalid IP address'
+        }), 400
+
+@app.route('/reconnect', methods=['POST'])
+def reconnect():
+    """Manually reconnect to Pi"""
+    print("Manual reconnect requested")
+    success = initialize_robot_client()
+    
+    return jsonify({
+        'status': 'success' if success else 'error',
+        'message': 'Reconnected to Pi' if success else 'Failed to reconnect',
+        'connected': success
+    })
+
+# Background thread to maintain connection
+def connection_monitor():
+    """Monitor and maintain connection to Pi"""
+    global robot_client
+    
+    while True:
+        time.sleep(5)  # Check every 5 seconds
+        
+        if robot_client:
+            if not robot_client.is_connected():
+                print("Connection lost, attempting to reconnect...")
+                initialize_robot_client()
+            else:
+                # Send periodic ping to keep connection alive
+                robot_client.send_command("PING")
+
+if __name__ == '__main__':
+    print("=" * 60)
+    print("🤖 Robot Controller Server Starting...")
+    print(f"📡 Default Pi IP: {pi_ip}:{pi_port}")
+    print("🌐 Web interface will be available at: http://localhost:5000")
+    print("🎮 Control modes: manual, follow")
+    print("📏 Follow mode with distance-based control")
+    print("🔄 Attempting initial connection to Pi...")
+    print("=" * 60)
+    
+    # Try initial connection
+    initialize_robot_client()
+    
+    # Start connection monitor thread
+    monitor_thread = threading.Thread(target=connection_monitor, daemon=True)
+    monitor_thread.start()
+    
+    try:
+        # Run Flask app
+        app.run(debug=False, host='0.0.0.0', port=5000, threaded=True)
+    except KeyboardInterrupt:
+        print("\n🛑 Shutting down...")
+        if robot_client:
+            robot_client.disconnect()
+    finally:
+        print("✅ Controller server stopped")
