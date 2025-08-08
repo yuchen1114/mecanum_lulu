@@ -127,6 +127,7 @@ class RobotControllerNode(Node):
             self.get_logger().info(f'Motor serial connected on {MOTOR_SERIAL_PORT}')
         except Exception as e:
             self.get_logger().error(f'Failed to open motor serial port: {e}')
+            self.get_logger().warning('Continuing without motor serial connection')
             self.motor_serial = None
     
     def read_motor_serial(self):
@@ -162,7 +163,8 @@ class RobotControllerNode(Node):
                     self.get_logger().warning(f'Motor controller: {line}')
                     
         except Exception as e:
-            self.get_logger().error(f'Error reading motor serial: {e}')
+            if "device reports readiness" not in str(e):  # Ignore common non-critical errors
+                self.get_logger().error(f'Error reading motor serial: {e}')
     
     def send_motor_command(self, vel1, vel2, vel3):
         """Send velocity command to motor controller"""
@@ -519,3 +521,251 @@ class RobotControllerNode(Node):
             error_msg = f"ERROR:Exception processing command: {str(e)}"
             self.get_logger().error(error_msg)
             return error_msg
+
+class VideoStreamServer(threading.Thread):
+    """Separate server for video streaming"""
+    def __init__(self, robot_node, port):
+        super().__init__(daemon=True)
+        self.robot_node = robot_node
+        self.port = port
+        self.running = False
+        self.server_socket = None
+        self.clients = []
+        self.client_lock = threading.Lock()
+    
+    def run(self):
+        """Run video streaming server"""
+        self.running = True
+        
+        # Create server socket
+        self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        
+        try:
+            self.server_socket.bind((HOST, self.port))
+            self.server_socket.listen(5)
+            
+            self.robot_node.get_logger().info(f'Video server listening on port {self.port}')
+            
+            # Accept clients in a separate thread
+            accept_thread = threading.Thread(target=self.accept_clients, daemon=True)
+            accept_thread.start()
+            
+            # Stream video frames
+            while self.running:
+                with self.robot_node.image_lock:
+                    if self.robot_node.latest_image is not None:
+                        # Resize image to 640x480 if needed
+                        height, width = self.robot_node.latest_image.shape[:2]
+                        if width != 640 or height != 480:
+                            resized = cv2.resize(self.robot_node.latest_image, (640, 480))
+                        else:
+                            resized = self.robot_node.latest_image
+                        
+                        # Encode image as JPEG with quality setting
+                        encode_param = [int(cv2.IMWRITE_JPEG_QUALITY), 80]
+                        _, buffer = cv2.imencode('.jpg', resized, encode_param)
+                        frame_data = buffer.tobytes()
+                        
+                        # Send to all connected clients
+                        with self.client_lock:
+                            for client in self.clients[:]:
+                                try:
+                                    client.sendall(frame_data)
+                                    client.sendall(b'\xff\xd9')  # JPEG end marker
+                                except:
+                                    self.clients.remove(client)
+                                    client.close()
+                
+                time.sleep(0.033)  # ~30 FPS
+                
+        except Exception as e:
+            self.robot_node.get_logger().error(f'Video server error: {e}')
+        finally:
+            self.cleanup()
+    
+    def accept_clients(self):
+        """Accept video streaming clients"""
+        while self.running:
+            try:
+                client, addr = self.server_socket.accept()
+                with self.client_lock:
+                    self.clients.append(client)
+                self.robot_node.get_logger().info(f'Video client connected from {addr}')
+            except:
+                if self.running:
+                    time.sleep(0.1)
+    
+    def cleanup(self):
+        """Clean up video server"""
+        self.running = False
+        
+        with self.client_lock:
+            for client in self.clients:
+                try:
+                    client.close()
+                except:
+                    pass
+            self.clients.clear()
+        
+        if self.server_socket:
+            self.server_socket.close()
+
+class RobotServer:
+    def __init__(self, robot_node):
+        self.robot_node = robot_node
+        self.server_socket = None
+        self.running = False
+        self.active_clients = []
+        self.client_lock = threading.Lock()
+    
+    def start(self):
+        """Start the socket server"""
+        self.robot_node.get_logger().info('Starting socket server...')
+        
+        # Create socket
+        self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        
+        try:
+            self.server_socket.bind((HOST, PORT))
+            self.server_socket.listen(MAX_CONNECTIONS)
+            
+            self.robot_node.get_logger().info(f'Server listening on {HOST}:{PORT}')
+            
+            self.running = True
+            
+            while self.running:
+                try:
+                    client_socket, client_address = self.server_socket.accept()
+                    
+                    with self.client_lock:
+                        self.active_clients.append(client_socket)
+                    
+                    client_thread = threading.Thread(
+                        target=self.handle_client,
+                        args=(client_socket, client_address),
+                        daemon=True
+                    )
+                    client_thread.start()
+                    
+                except socket.error as e:
+                    if self.running:
+                        self.robot_node.get_logger().error(f'Socket error: {e}')
+                    break
+                    
+        except Exception as e:
+            self.robot_node.get_logger().error(f'Server error: {e}')
+        finally:
+            self.cleanup()
+    
+    def handle_client(self, client_socket, client_address):
+        """Handle individual client connection"""
+        self.robot_node.get_logger().info(f'New connection from {client_address}')
+        
+        client_socket.settimeout(0.1)
+        
+        try:
+            while self.running:
+                try:
+                    ready, _, _ = select.select([client_socket], [], [], 0.1)
+                    
+                    if ready:
+                        data = client_socket.recv(1024)
+                        if not data:
+                            break
+                        
+                        command = data.decode('utf-8').strip()
+                        response = self.robot_node.process_command(command)
+                        
+                        try:
+                            client_socket.send(response.encode('utf-8'))
+                        except socket.error:
+                            break
+                    
+                    time.sleep(0.01)
+                    
+                except socket.timeout:
+                    continue
+                except ConnectionResetError:
+                    break
+                    
+        except Exception as e:
+            self.robot_node.get_logger().error(f'Client handler error: {e}')
+        finally:
+            with self.client_lock:
+                if client_socket in self.active_clients:
+                    self.active_clients.remove(client_socket)
+            
+            client_socket.close()
+            self.robot_node.get_logger().info(f'Connection closed with {client_address}')
+    
+    def stop(self):
+        """Stop the server"""
+        self.running = False
+        
+        with self.client_lock:
+            for client_socket in self.active_clients:
+                try:
+                    client_socket.close()
+                except:
+                    pass
+            self.active_clients.clear()
+        
+        if self.server_socket:
+            self.server_socket.close()
+    
+    def cleanup(self):
+        """Cleanup resources"""
+        self.robot_node.stop_robot()
+        self.stop()
+
+def main(args=None):
+    """Main function - Entry point for ROS2"""
+    print("🤖 ROS2 Robot Controller Starting...")
+    print("📹 Video streaming enabled (640x480)")
+    print("🎮 Modes: manual, follow")
+    print("🎯 Follow mode with distance-based speed control")
+    print("📏 Ultrasonic distance data from motor controller")
+    print("=" * 50)
+    
+    rclpy.init(args=args)
+    
+    try:
+        # Create robot node
+        robot_node = RobotControllerNode()
+        
+        # Create servers
+        server = RobotServer(robot_node)
+        video_server = VideoStreamServer(robot_node, VIDEO_PORT)
+        
+        # Start servers in separate threads
+        server_thread = threading.Thread(target=server.start, daemon=True)
+        server_thread.start()
+        
+        video_server.start()
+        
+        robot_node.get_logger().info('All systems ready!')
+        
+        # Spin the node
+        rclpy.spin(robot_node)
+        
+    except KeyboardInterrupt:
+        print("\n🛑 Shutdown requested")
+    except Exception as e:
+        print(f"❌ Error: {e}")
+    finally:
+        print("🧹 Shutting down...")
+        if 'server' in locals():
+            server.stop()
+        if 'video_server' in locals():
+            video_server.running = False
+        if 'robot_node' in locals():
+            if robot_node.motor_serial:
+                robot_node.motor_serial.close()
+            robot_node.destroy_node()
+        rclpy.shutdown()
+        print("✅ Robot Controller stopped")
+
+if __name__ == "__main__":
+    main()

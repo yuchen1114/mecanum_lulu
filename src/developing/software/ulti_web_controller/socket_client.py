@@ -1,80 +1,92 @@
+"""
+Socket client for communicating with the robot server
+Handles connection management, command sending, and response handling
+"""
+
 import socket
-import time
-import json
 import threading
-from typing import Optional, Callable
+import time
+import queue
 
 class RobotSocketClient:
-    """
-    Long-lived socket client for robot communication
-    Supports continuous commands and connection management
-    """
-    
-    def __init__(self, pi_ip: str, pi_port: int, timeout: int = 5):
-        self.pi_ip = pi_ip
-        self.pi_port = pi_port
-        self.timeout = timeout
-        self.socket: Optional[socket.socket] = None
+    def __init__(self, host='192.168.16.154', port=8888):
+        self.host = host
+        self.port = port
+        self.socket = None
         self.connected = False
         self.running = False
-        self.command_queue = []
-        self.response_callback: Optional[Callable] = None
-        self.connection_callback: Optional[Callable] = None
-        self.lock = threading.Lock()
         
-        # Command sending thread
-        self.command_thread = None
-        
-        # Continuous command state
+        # Command queue for continuous commands
+        self.command_queue = queue.Queue()
         self.continuous_command = None
-        self.continuous_active = False
-        self.continuous_interval = 0.1  # 100ms interval for continuous commands
+        self.continuous_interval = 0.1
+        self.continuous_thread = None
+        
+        # Callbacks
+        self.response_callback = None
+        self.connection_callback = None
+        
+        # Response handling
+        self.last_response = None
+        self.response_lock = threading.Lock()
     
-    def set_response_callback(self, callback: Callable):
-        """Set callback for command responses"""
+    def set_response_callback(self, callback):
+        """Set callback for command responses
+        Callback signature: callback(command, response, success)
+        """
         self.response_callback = callback
     
-    def set_connection_callback(self, callback: Callable):
-        """Set callback for connection status changes"""
+    def set_connection_callback(self, callback):
+        """Set callback for connection status changes
+        Callback signature: callback(connected, message)
+        """
         self.connection_callback = callback
     
-    def connect(self) -> bool:
-        """Establish connection to Pi"""
+    def connect(self):
+        """Connect to the robot server"""
         try:
+            # Close existing connection if any
             if self.socket:
-                self.disconnect()
+                try:
+                    self.socket.close()
+                except:
+                    pass
             
+            # Create new socket
             self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            self.socket.settimeout(self.timeout)
-            self.socket.connect((self.pi_ip, self.pi_port))
+            self.socket.settimeout(5.0)  # 5 second timeout for connection
             
-            # Set to non-blocking for continuous operation
-            self.socket.setblocking(False)
+            # Try to connect
+            self.socket.connect((self.host, self.port))
+            self.socket.settimeout(1.0)  # 1 second timeout for operations
             
             self.connected = True
             self.running = True
             
-            # Start command processing thread
-            self.command_thread = threading.Thread(target=self._command_processor, daemon=True)
-            self.command_thread.start()
-            
             if self.connection_callback:
-                self.connection_callback(True, "Connected")
+                self.connection_callback(True, f"Connected to {self.host}:{self.port}")
             
-            print(f"✅ Connected to Pi at {self.pi_ip}:{self.pi_port}")
             return True
+            
+        except socket.timeout:
+            self.connected = False
+            if self.connection_callback:
+                self.connection_callback(False, "Connection timeout")
+            return False
             
         except Exception as e:
             self.connected = False
             if self.connection_callback:
                 self.connection_callback(False, f"Connection failed: {str(e)}")
-            print(f"❌ Connection failed: {e}")
             return False
     
     def disconnect(self):
-        """Disconnect from Pi"""
+        """Disconnect from the robot server"""
         self.running = False
-        self.continuous_active = False
+        self.connected = False
+        
+        # Stop continuous command thread
+        self.stop_continuous_command()
         
         if self.socket:
             try:
@@ -83,212 +95,150 @@ class RobotSocketClient:
                 pass
             self.socket = None
         
-        self.connected = False
-        
         if self.connection_callback:
             self.connection_callback(False, "Disconnected")
-        
-        print("🔌 Disconnected from Pi")
     
-    def is_connected(self) -> bool:
-        """Check if connected to Pi"""
-        return self.connected and self.socket is not None
+    def is_connected(self):
+        """Check if client is connected"""
+        return self.connected
     
-    def send_command(self, command: str) -> bool:
-        """Send a single command (non-blocking)"""
-        if not self.is_connected():
+    def send_command(self, command):
+        """Send a command to the robot server and get response"""
+        if not self.connected:
+            if self.response_callback:
+                self.response_callback(command, "Not connected", False)
             return False
-        
-        with self.lock:
-            self.command_queue.append({
-                'command': command,
-                'timestamp': time.time(),
-                'type': 'single'
-            })
-        
-        return True
-    
-    def start_continuous_command(self, command: str, interval: float = 0.1):
-        """Start sending a command continuously"""
-        with self.lock:
-            self.continuous_command = command
-            self.continuous_interval = interval
-            self.continuous_active = True
-        
-        print(f"🔄 Started continuous command: {command}")
-    
-    def stop_continuous_command(self):
-        """Stop sending continuous commands"""
-        with self.lock:
-            self.continuous_active = False
-            self.continuous_command = None
-        
-        print("⏹️ Stopped continuous command")
-    
-    def _command_processor(self):
-        """Background thread to process commands"""
-        last_continuous_time = 0
-        
-        while self.running:
-            try:
-                current_time = time.time()
-                
-                # Process continuous commands
-                if self.continuous_active and self.continuous_command:
-                    if current_time - last_continuous_time >= self.continuous_interval:
-                        self._send_raw_command(self.continuous_command)
-                        last_continuous_time = current_time
-                
-                # Process single commands
-                with self.lock:
-                    if self.command_queue:
-                        cmd_data = self.command_queue.pop(0)
-                        self._send_raw_command(cmd_data['command'])
-                
-                time.sleep(0.01)  # Small delay to prevent busy waiting
-                
-            except Exception as e:
-                print(f"❌ Error in command processor: {e}")
-                if not self.running:
-                    break
-    
-    def _send_raw_command(self, command: str):
-        """Send raw command to Pi"""
-        if not self.socket:
-            return
         
         try:
             # Send command
-            message = command.encode('utf-8')
-            self.socket.send(message)
+            self.socket.send(command.encode('utf-8'))
             
-            # Try to receive response (non-blocking)
+            # Try to receive response
             try:
                 response = self.socket.recv(1024).decode('utf-8')
+                
+                with self.response_lock:
+                    self.last_response = response
+                
                 if self.response_callback:
                     self.response_callback(command, response, True)
-            except socket.error:
-                # No response available (non-blocking), that's OK
-                pass
                 
-        except socket.error as e:
-            print(f"❌ Socket error: {e}")
+                return True
+                
+            except socket.timeout:
+                # Timeout is OK for some commands
+                if self.response_callback:
+                    self.response_callback(command, "Timeout", True)
+                return True
+                
+        except ConnectionResetError:
             self.connected = False
             if self.connection_callback:
-                self.connection_callback(False, f"Socket error: {e}")
-    
-    def ping(self) -> bool:
-        """Send ping to check connection"""
-        return self.send_command("PING")
-    
-    def get_status(self) -> bool:
-        """Request status from Pi"""
-        return self.send_command("STATUS")
-
-# Backward compatibility functions
-def send_command(pi_ip, pi_port, command, timeout=5):
-    """
-    Send a single command (legacy function for backward compatibility)
-    """
-    try:
-        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        sock.settimeout(timeout)
-        sock.connect((pi_ip, pi_port))
-        
-        message = command.encode('utf-8')
-        sock.sendall(message)
-        
-        response = sock.recv(1024).decode('utf-8')
-        sock.close()
-        
-        return {
-            'success': True,
-            'response': response,
-            'timestamp': time.time()
-        }
-        
-    except Exception as e:
-        return {
-            'success': False,
-            'error': str(e),
-            'timestamp': time.time()
-        }
-
-def check_connection(pi_ip, pi_port, timeout=3):
-    """
-    Check if the Raspberry Pi server is reachable (legacy function)
-    """
-    try:
-        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        sock.settimeout(timeout)
-        
-        result = sock.connect_ex((pi_ip, pi_port))
-        sock.close()
-        
-        if result == 0:
-            return {
-                'connected': True,
-                'status': 'online',
-                'timestamp': time.time()
-            }
-        else:
-            return {
-                'connected': False,
-                'status': 'offline',
-                'timestamp': time.time()
-            }
+                self.connection_callback(False, "Connection lost")
+            if self.response_callback:
+                self.response_callback(command, "Connection lost", False)
+            return False
             
-    except Exception as e:
-        return {
-            'connected': False,
-            'status': 'error',
-            'error': str(e),
-            'timestamp': time.time()
-        }
+        except Exception as e:
+            if self.response_callback:
+                self.response_callback(command, f"Error: {str(e)}", False)
+            return False
+    
+    def start_continuous_command(self, command, interval=0.1):
+        """Start sending a command continuously at specified interval"""
+        self.stop_continuous_command()
+        
+        self.continuous_command = command
+        self.continuous_interval = interval
+        
+        self.continuous_thread = threading.Thread(
+            target=self._continuous_sender,
+            daemon=True
+        )
+        self.continuous_thread.start()
+    
+    def stop_continuous_command(self):
+        """Stop sending continuous commands"""
+        self.continuous_command = None
+        
+        if self.continuous_thread:
+            self.continuous_thread.join(timeout=0.5)
+            self.continuous_thread = None
+    
+    def _continuous_sender(self):
+        """Thread function for sending continuous commands"""
+        while self.continuous_command and self.connected:
+            self.send_command(self.continuous_command)
+            time.sleep(self.continuous_interval)
+    
+    def get_last_response(self):
+        """Get the last response received"""
+        with self.response_lock:
+            return self.last_response
+    
+    def ping(self):
+        """Send a ping command to test connection"""
+        if self.send_command("PING"):
+            with self.response_lock:
+                return self.last_response == "PONG"
+        return False
+    
+    def reconnect(self):
+        """Attempt to reconnect to the server"""
+        self.disconnect()
+        time.sleep(0.5)
+        return self.connect()
+    
+    def set_host(self, host, port=None):
+        """Change the host and optionally port"""
+        self.host = host
+        if port:
+            self.port = port
+        
+        # If we were connected, reconnect to new host
+        if self.connected:
+            return self.reconnect()
+        return True
 
-# Test function
+# Example usage
 if __name__ == "__main__":
-    # Test the long-lived socket client
-    test_ip = "192.168.16.154"
-    test_port = 8888
-    
-    print("🔌 Testing long-lived socket connection...")
-    
     # Create client
-    client = RobotSocketClient(test_ip, test_port)
+    client = RobotSocketClient('192.168.16.154', 8888)
     
     # Set up callbacks
-    def on_response(command, response, success):
-        print(f"📥 Response to '{command}': {response}")
+    def on_response(cmd, resp, success):
+        print(f"Command: {cmd} -> Response: {resp} (Success: {success})")
     
     def on_connection(connected, message):
-        print(f"🔗 Connection status: {connected} - {message}")
+        print(f"Connection: {connected} - {message}")
     
     client.set_response_callback(on_response)
     client.set_connection_callback(on_connection)
     
     # Connect
     if client.connect():
-        try:
-            # Test single commands
-            print("\n📤 Testing single commands...")
-            client.send_command("MODE:manual")
-            time.sleep(1)
-            
-            # Test continuous commands
-            print("\n🔄 Testing continuous commands (3 seconds)...")
-            client.start_continuous_command("MOVE:forward", 0.2)
-            time.sleep(3)
-            client.stop_continuous_command()
-            
-            # Stop robot
-            client.send_command("MOVE:stop")
-            time.sleep(1)
-            
-        except KeyboardInterrupt:
-            print("\n🛑 Test interrupted")
+        print("Connected successfully!")
         
-        finally:
-            client.disconnect()
+        # Test commands
+        client.send_command("PING")
+        time.sleep(0.5)
+        
+        client.send_command("STATUS")
+        time.sleep(0.5)
+        
+        client.send_command("MODE:manual")
+        time.sleep(0.5)
+        
+        # Test continuous movement
+        print("Starting continuous forward movement...")
+        client.start_continuous_command("MOVE:forward", 0.1)
+        time.sleep(2)
+        
+        print("Stopping movement...")
+        client.stop_continuous_command()
+        client.send_command("MOVE:stop")
+        
+        time.sleep(1)
+        client.disconnect()
     else:
-        print("❌ Cannot connect to Pi server. Make sure server_ros2.py is running on the Pi.")
+        print("Failed to connect")
