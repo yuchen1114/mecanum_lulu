@@ -1,4 +1,4 @@
-# YOLO Lip Detection & Tracking Model
+# YOLO Detection & Tracking Model
 
 ## 📋 Overview
 
