@@ -28,7 +28,7 @@ The model was trained for 130 epochs with the following characteristics:
 - Validation losses showed consistent improvement throughout training
 
 <p align="center">
-  <img src="results/training_metrics.png" alt="Training Metrics" width="70%"/>
+  <img src="_results/training_metrics.png" alt="Training Metrics" width="70%"/>
 </p>
 
 ## 🔍 Model Capabilities
@@ -44,8 +44,8 @@ The model successfully detects lips with high confidence scores (0.7-0.8) in var
 
 
 <p align="center">
-  <img src="results/test_image1.png" alt="Test Image 1" width="400"/>
-  <img src="results/test_image2.png" alt="Test Image 2" width="400"/>
+  <img src="_results/test_image1.png" alt="Test Image 1" width="400"/>
+  <img src="_results/test_image2.png" alt="Test Image 2" width="400"/>
 </p>
 
 
@@ -54,7 +54,7 @@ The model successfully detects lips with high confidence scores (0.7-0.8) in var
 The confusion matrix demonstrates the model's classification performance:
 
 <p align="center">
-  <img src="results/confusion_matrix.png" alt="Confusion Matrix" width="70%"/>
+  <img src="_results/confusion_matrix.png" alt="Confusion Matrix" width="70%"/>
 </p>
 
 - **True Positives**: 2 (100% detection rate for lip class)
