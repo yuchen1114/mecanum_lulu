@@ -27,7 +27,9 @@ The model was trained for 130 epochs with the following characteristics:
 - mAP scores stabilized at maximum values, indicating excellent detection performance
 - Validation losses showed consistent improvement throughout training
 
-![Training Metrics](results/training_metrics.png)
+<p align="center">
+  <img src="results/training_metrics.png" alt="Training Metrics" width="70%"/>
+</p>
 
 ## 🔍 Model Capabilities
 
@@ -40,15 +42,20 @@ The model successfully detects lips with high confidence scores (0.7-0.8) in var
 | Close-up Detection | 0.7 | Accurate lip detection in close-range shots |
 | Variable Backgrounds | 0.8 | Robust detection against complex backgrounds |
 
-![Test Image](results/test_image1.png)
 
-![Test Image](results/test_image2.png)
+<p align="center">
+  <img src="results/test_image1.png" alt="Test Image 1" width="400"/>
+  <img src="results/test_image2.png" alt="Test Image 2" width="400"/>
+</p>
+
 
 ## 📊 Confusion Matrix Analysis
 
 The confusion matrix demonstrates the model's classification performance:
 
-![Confusion Matrix](results/confusion_matrix.png)
+<p align="center">
+  <img src="results/confusion_matrix.png" alt="Confusion Matrix" width="70%"/>
+</p>
 
 - **True Positives**: 2 (100% detection rate for lip class)
 - **False Positives**: 0
