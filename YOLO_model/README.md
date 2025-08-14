@@ -27,7 +27,7 @@ The model was trained for 130 epochs with the following characteristics:
 - mAP scores stabilized at maximum values, indicating excellent detection performance
 - Validation losses showed consistent improvement throughout training
 
-![Training Metrics](results/training_metrix.png)
+![Training Metrics](results/training_metrics.png)
 
 ## 🔍 Model Capabilities
 
@@ -40,11 +40,15 @@ The model successfully detects lips with high confidence scores (0.7-0.8) in var
 | Close-up Detection | 0.7 | Accurate lip detection in close-range shots |
 | Variable Backgrounds | 0.8 | Robust detection against complex backgrounds |
 
+![Test Image](results/test_image1.png)
+
+![Test Image](results/test_image2.png)
+
 ## 📊 Confusion Matrix Analysis
 
 The confusion matrix demonstrates the model's classification performance:
 
-![Confusion Matrix](path/to/confusion_matrix.png)
+![Confusion Matrix](results/confusion_matrix.png)
 
 - **True Positives**: 2 (100% detection rate for lip class)
 - **False Positives**: 0
@@ -94,11 +98,3 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - YOLOv8 by Ultralytics
 - OpenCV community
 - Contributors and testers
-
-## 📞 Contact
-
-For questions and support, please open an issue in the GitHub repository.
-
----
-
-**Note**: Remember to update the image paths and model paths according to your actual file structure.
