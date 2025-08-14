@@ -26,7 +26,7 @@ HOST = '0.0.0.0'
 PORT = 8888
 VIDEO_PORT = 8889
 MAX_CONNECTIONS = 5
-COMMAND_TIMEOUT = 0.5
+COMMAND_TIMEOUT = 1.0
 
 class RobotControllerNode(Node):
     def __init__(self):

@@ -1,6 +1,6 @@
 """
 Socket client for communicating with the robot server
-Handles connection management, command sending, and response handling
+IMPROVED: Better continuous movement handling and reduced timeout issues
 """
 
 import socket
@@ -19,7 +19,7 @@ class RobotSocketClient:
         # Command queue for continuous commands
         self.command_queue = queue.Queue()
         self.continuous_command = None
-        self.continuous_interval = 0.1
+        self.continuous_interval = 0.2  # IMPROVED: Slower interval to reduce server load
         self.continuous_thread = None
         
         # Callbacks
@@ -29,6 +29,10 @@ class RobotSocketClient:
         # Response handling
         self.last_response = None
         self.response_lock = threading.Lock()
+        
+        # IMPROVED: Movement state tracking
+        self.current_movement = None
+        self.movement_lock = threading.Lock()
     
     def set_response_callback(self, callback):
         """Set callback for command responses
@@ -58,7 +62,7 @@ class RobotSocketClient:
             
             # Try to connect
             self.socket.connect((self.host, self.port))
-            self.socket.settimeout(1.0)  # 1 second timeout for operations
+            self.socket.settimeout(2.0)  # IMPROVED: Longer timeout for operations
             
             self.connected = True
             self.running = True
@@ -144,12 +148,18 @@ class RobotSocketClient:
                 self.response_callback(command, f"Error: {str(e)}", False)
             return False
     
-    def start_continuous_command(self, command, interval=0.1):
+    def start_continuous_command(self, command, interval=0.2):
         """Start sending a command continuously at specified interval"""
         self.stop_continuous_command()
         
         self.continuous_command = command
-        self.continuous_interval = interval
+        self.continuous_interval = max(0.1, interval)  # IMPROVED: Minimum 100ms interval
+        
+        # IMPROVED: Track current movement direction
+        if "MOVE:" in command:
+            direction = command.split("MOVE:")[1]
+            with self.movement_lock:
+                self.current_movement = direction
         
         self.continuous_thread = threading.Thread(
             target=self._continuous_sender,
@@ -158,8 +168,14 @@ class RobotSocketClient:
         self.continuous_thread.start()
     
     def stop_continuous_command(self):
-        """Stop sending continuous commands"""
+        """Stop sending continuous commands and send explicit stop"""
         self.continuous_command = None
+        
+        # IMPROVED: Send explicit stop command when stopping continuous movement
+        with self.movement_lock:
+            if self.current_movement and self.current_movement != "stop":
+                self.send_command("MOVE:stop")
+                self.current_movement = "stop"
         
         if self.continuous_thread:
             self.continuous_thread.join(timeout=0.5)
@@ -199,6 +215,15 @@ class RobotSocketClient:
         if self.connected:
             return self.reconnect()
         return True
+    
+    def get_current_movement(self):
+        """Get current movement direction"""
+        with self.movement_lock:
+            return self.current_movement
+    
+    def send_single_move(self, direction):
+        """Send a single movement command (for momentary actions)"""
+        return self.send_command(f"MOVE:{direction}")
 
 # Example usage
 if __name__ == "__main__":
@@ -207,7 +232,9 @@ if __name__ == "__main__":
     
     # Set up callbacks
     def on_response(cmd, resp, success):
-        print(f"Command: {cmd} -> Response: {resp} (Success: {success})")
+        # IMPROVED: Less verbose logging for movement commands
+        if not cmd.startswith("MOVE:") or not success:
+            print(f"Command: {cmd} -> Response: {resp} (Success: {success})")
     
     def on_connection(connected, message):
         print(f"Connection: {connected} - {message}")
@@ -229,14 +256,17 @@ if __name__ == "__main__":
         client.send_command("MODE:manual")
         time.sleep(0.5)
         
-        # Test continuous movement
+        # Test continuous movement with improved handling
         print("Starting continuous forward movement...")
-        client.start_continuous_command("MOVE:forward", 0.1)
+        client.start_continuous_command("MOVE:forward", 0.2)  # 200ms interval
+        time.sleep(3)
+        
+        print("Switching to backward movement...")
+        client.start_continuous_command("MOVE:backward", 0.2)
         time.sleep(2)
         
         print("Stopping movement...")
         client.stop_continuous_command()
-        client.send_command("MOVE:stop")
         
         time.sleep(1)
         client.disconnect()
