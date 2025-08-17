@@ -3,12 +3,12 @@
 A three-wheeled omnidirectional autonomous vehicle built from scratch, featuring complete translation and rotation capabilities in any direction. This project encompasses hardware design, firmware development, and software implementation as a comprehensive learning platform for robotics and autonomous systems.
 
 <p align="center">
-  <img src="_image/front.png" alt="Car Image 1" width="400"/>
-  <img src="_image/hind.png" alt="Car Image 2" width="400"/>
+  <img src="_image/front.PNG" alt="Car Image 1" width="400"/>
+  <img src="_image/hind.PNG" alt="Car Image 2" width="400"/>
 </p>
 <p align="center">
-  <img src="_image/top.png" alt="Car Image 3" width="400"/>
-  <img src="_image/bottom.png" alt="Car Image 4" width="400"/>
+  <img src="_image/top.PNG" alt="Car Image 3" width="400"/>
+  <img src="_image/bottom.PNG" alt="Car Image 4" width="400"/>
 </p>
 
 ## 🎯 Features
