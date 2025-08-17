@@ -9,7 +9,7 @@ UART server camera YOLO
 
 
 
-README
+README for src controller hardware
 vehicle image*2
 demo video
 component layout
