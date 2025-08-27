@@ -1,4 +1,4 @@
-# YOLO Lip Detection & Tracking Model
+# YOLO Detection & Tracking Model
 
 ## 📋 Overview
 
@@ -27,7 +27,9 @@ The model was trained for 130 epochs with the following characteristics:
 - mAP scores stabilized at maximum values, indicating excellent detection performance
 - Validation losses showed consistent improvement throughout training
 
-![Training Metrics](path/to/training_metrics.png)
+<p align="center">
+  <img src="_results/training_metrics.png" alt="Training Metrics" width="70%"/>
+</p>
 
 ## 🔍 Model Capabilities
 
@@ -40,11 +42,20 @@ The model successfully detects lips with high confidence scores (0.7-0.8) in var
 | Close-up Detection | 0.7 | Accurate lip detection in close-range shots |
 | Variable Backgrounds | 0.8 | Robust detection against complex backgrounds |
 
+
+<p align="center">
+  <img src="_results/test_image1.png" alt="Test Image 1" width="400"/>
+  <img src="_results/test_image2.png" alt="Test Image 2" width="400"/>
+</p>
+
+
 ## 📊 Confusion Matrix Analysis
 
 The confusion matrix demonstrates the model's classification performance:
 
-![Confusion Matrix](path/to/confusion_matrix.png)
+<p align="center">
+  <img src="_results/confusion_matrix.png" alt="Confusion Matrix" width="70%"/>
+</p>
 
 - **True Positives**: 2 (100% detection rate for lip class)
 - **False Positives**: 0
@@ -94,11 +105,3 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - YOLOv8 by Ultralytics
 - OpenCV community
 - Contributors and testers
-
-## 📞 Contact
-
-For questions and support, please open an issue in the GitHub repository.
-
----
-
-**Note**: Remember to update the image paths and model paths according to your actual file structure.
