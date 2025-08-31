@@ -7,10 +7,10 @@ This repository contains a custom-trained YOLO model specifically designed for r
 ## 🎯 Model Performance
 
 ### Key Metrics
-- **Precision**: ~100% on validation set
-- **Recall**: ~100% on validation set
-- **mAP@50**: ~100%
-- **mAP@50-95**: ~100%
+- **Precision**: 	0.98353
+- **Recall**:1
+- **mAP@50**: 0.995
+- **mAP@50-95**: 0.995
 - **Confidence Threshold**: 0.7-0.8
 
 ### Training Results
@@ -18,12 +18,12 @@ This repository contains a custom-trained YOLO model specifically designed for r
 The model was trained for 130 epochs with the following characteristics:
 
 #### Loss Convergence
-- **Box Loss**: Converged from ~0.8 to ~0.25
-- **Classification Loss**: Dropped from ~3.5 to ~0.6
-- **DFL Loss**: Reduced from ~1.1 to ~0.8
+- **Box Loss**: Converged from 0.79338 to 0.19745
+- **Classification Loss**: Dropped from 3.52749 to 0.81001
+- **DFL Loss**: Reduced from 1.07948 to 0.84111
 
 #### Performance Metrics Evolution
-- Precision and Recall reached near-perfect scores after ~50 epochs
+- Precision and Recall reached near-perfect scores after ~54 epochs
 - mAP scores stabilized at maximum values, indicating excellent detection performance
 - Validation losses showed consistent improvement throughout training
 
