@@ -13,7 +13,7 @@ import socket
 app = Flask(__name__)
 
 # Configuration
-PI_IP = "192.168.16.154"  # Default Pi IP
+PI_IP = "172.20.10.2"  # Default Pi IP
 VIDEO_PORT = 8889  # Pi's video streaming port
 
 # Video streaming variables

@@ -2,7 +2,7 @@
 # Update these settings according to your setup
 
 # Raspberry Pi Network Settings
-PI_IP = "192.168.16.154"  # My Pi's IP address
+PI_IP = "172.20.10.2"  # My Pi's IP address
 PI_PORT = 8888
 
 # Web Server Settings

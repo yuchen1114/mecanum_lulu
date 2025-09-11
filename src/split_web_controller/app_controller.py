@@ -14,7 +14,7 @@ app = Flask(__name__)
 # Global variables to track robot state
 current_mode = "manual"
 robot_status = "disconnected"
-pi_ip = "192.168.16.154"  # Default Pi IP
+pi_ip = "172.20.10.2"  # Default Pi IP
 pi_port = 8888
 
 # Long-lived socket client
