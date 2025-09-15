@@ -3,7 +3,10 @@
 ROS2 Robot Controller Server - Complete Version with Fixed Follow Mode
 Supports manual, follow, and gyro modes with video streaming
 """
-
+"""
+newest version
+WARNING: not stable and well-developed
+"""
 import socket
 import threading
 import time
