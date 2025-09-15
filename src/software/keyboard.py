@@ -18,7 +18,7 @@ class KeyboardTeleop(Node):
         self.pub = self.create_publisher(Twist, '/cmd_vel', 10)
 
         # Show startup message
-        self.get_logger().info("Use W/A/S/D to move, Q to quit")
+        self.get_logger().info("Use W/A/S/D to move, k to stop, Q to quit")
 
         # Start reading keys
         self.run()
@@ -36,21 +36,28 @@ class KeyboardTeleop(Node):
         return ch
 
     def run(self):
-        speed = 0.2  # linear speed (m/s)
-        turn = 0.5   # angular speed (rad/s)
+        speed = 1.0  # linear speed (mm/s)
+        turn = 1.0   # angular speed (rad/s)
 
         while rclpy.ok():
             key = self.get_key()  # wait for one key press
             msg = Twist()  # create a new Twist message
 
             if key.lower() == 'w':
-                msg.linear.x = speed  # move forward
+                msg.linear.x = speed
+                msg.angular.z = 0.0  # move forward
             elif key.lower() == 's':
-                msg.linear.x = -speed  # move backward
+                msg.linear.x = -speed  
+                msg.angular.z = 0.0  # move backward
             elif key.lower() == 'a':
+                msg.linear.x = 0.0
                 msg.angular.z = turn  # turn left
             elif key.lower() == 'd':
+                msg.linear.x = 0.0
                 msg.angular.z = -turn  # turn right
+            elif key.lower() == 'k':
+                msg.linear.x = 0.0
+                msg.angular.z = 0.0  # turn right
             elif key.lower() == 'q':
                 break  # exit the loop (and node)
             else:
